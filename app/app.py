@@ -7,7 +7,12 @@ from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import shutil
 
-from app.consultants import run_consultant_response, DEFAULT_CONSULTANT_KEY
+from app.consultants import (
+    run_consultant_response,
+    DEFAULT_CONSULTANT_KEY,
+    CONSULTANTS,
+    list_consultants,
+)
 from app.openai_client import client
 
 
@@ -21,7 +26,7 @@ GENERAL_CHAT_SYSTEM = (
     "You are a helpful assistant. Reply conversationally and keep answers concise "
     "unless the user asks for more detail."
 )
-CONSULTANT_TOOL_NAME = "call_consultant"
+CONSULTANT_TOOL_PREFIX = "call_"
 CONSULTANT_KEYWORDS = {
     "psc",
     "naics",
@@ -65,12 +70,35 @@ def create_app() -> Flask:
         return render_template("chatbot.html")
 
 
-    def _should_use_consultant(message: str) -> bool:
+    def _needs_any_consultant(message: str) -> bool:
         msg = (message or "").lower()
-        if "agent iwant" in msg or "consultant" in msg:
+        if "consultant" in msg:
             return True
         matches = sum(1 for kw in CONSULTANT_KEYWORDS if kw in msg)
         return matches >= 2
+
+
+    def _match_consultant_alias(message: str) -> Optional[str]:
+        msg = (message or "").lower()
+        for key, meta in CONSULTANTS.items():
+            for alias in meta.get("aliases", []):
+                if alias and alias in msg:
+                    return key
+            for keyword in meta.get("keywords", []):
+                if keyword and keyword in msg:
+                    return key
+        return None
+
+
+    def _select_consultant(message: str, explicit_key: Optional[str] = None) -> Optional[str]:
+        if explicit_key:
+            return explicit_key if explicit_key in CONSULTANTS else None
+        matched = _match_consultant_alias(message)
+        if matched:
+            return matched
+        if _needs_any_consultant(message):
+            return DEFAULT_CONSULTANT_KEY
+        return None
 
 
     def _extract_text(resp) -> str:
@@ -104,25 +132,32 @@ def create_app() -> Flask:
         project: str,
         vector_store_id: Optional[str],
         container_id: Optional[str],
+        consultant_key: str,
     ):
         result = run_consultant_response(
             message,
             vector_store_id=vector_store_id,
             container_id=container_id,
+            consultant_key=consultant_key,
         )
         text = (result.get("text") or "").strip()
         if not text:
             text = "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
+        meta = CONSULTANTS.get(consultant_key, {})
+        consultant_vs_id = meta.get("vector_store_id") or result.get("vector_store_id")
         tool_args = {
             "question": message,
             "project": project,
             "vector_store_id": vector_store_id,
             "container_id": container_id,
+            "consultant_key": consultant_key,
+            "consultant_vector_store_id": consultant_vs_id,
         }
+        tool_name = f"{CONSULTANT_TOOL_PREFIX}{consultant_key}"
         call_stub = {
             "type": "function_call",
-            "name": CONSULTANT_TOOL_NAME,
+            "name": tool_name,
             "arguments": tool_args,
         }
         response_stub = {
@@ -133,10 +168,13 @@ def create_app() -> Flask:
         return {
             "text": text,
             "mode": "consultant",
-            "tool_name": CONSULTANT_TOOL_NAME,
-            "consultant": result.get("consultant", DEFAULT_CONSULTANT_KEY),
+            "tool_name": tool_name,
+            "consultant": result.get("consultant", consultant_key),
+            "consultant_display": result.get("display_name") or meta.get("display_name"),
             "model": result.get("model"),
             "file_ids": file_ids,
+            "resources": meta.get("local_files", []),
+            "consultant_vector_store_id": consultant_vs_id,
             "output": [call_stub, response_stub],
         }
 
@@ -147,12 +185,23 @@ def create_app() -> Flask:
         project = data.get("project", "demo-project")
         vector_store_id = data.get("vector_store_id")
         container_id = data.get("container_id")
+        requested_consultant = data.get("consultant_key")
         if not msg:
             return jsonify({"error": "Missing message"}), 400
 
-        if _should_use_consultant(msg):
+        consultant_key = _select_consultant(msg, requested_consultant)
+        if requested_consultant and not consultant_key:
+            return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
+
+        if consultant_key:
             try:
-                payload = _consultant_tool_call(msg, project, vector_store_id, container_id)
+                payload = _consultant_tool_call(
+                    msg,
+                    project,
+                    vector_store_id,
+                    container_id,
+                    consultant_key,
+                )
                 return jsonify(payload)
             except Exception as exc:
                 return jsonify({"error": str(exc)}), 500
@@ -169,6 +218,10 @@ def create_app() -> Flask:
             return jsonify({"text": text, "mode": "direct"})
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+
+    @app.route("/v1/consultants", methods=["GET"])
+    def list_consultants_route():
+        return jsonify(list_consultants())
 
     @app.route("/v1/vector_stores", methods=["POST"])
     def create_vector_store():

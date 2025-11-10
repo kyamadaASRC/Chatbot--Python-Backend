@@ -1,58 +1,258 @@
-# consultants.py (testing version)
+"""Consultant registry and execution utilities."""
 
+from __future__ import annotations
+
+import json
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from app.openai_client import client
 
 DEFAULT_MODELS = ["gpt-5", "gpt-4.1"]
-DEFAULT_CONSULTANT_KEY = "agent_iwant_gpt"
-
 BASE_DIR = Path(__file__).resolve().parent
-CONSULTANT_DIR = BASE_DIR / "consultants" / "Agent_iWant_GPT"
+CONSULTANTS_ROOT = BASE_DIR / "consultants"
+VECTOR_CACHE_PATH = CONSULTANTS_ROOT / "vector_store_cache.json"
+DEFAULT_INSTRUCTION_TEXT = "You are the Agent_iWant_GPT assistant."
 
 
-def _instruction_path() -> Optional[Path]:
-    if not CONSULTANT_DIR.exists():
-        return None
+def _slugify(name: str) -> str:
+    return name.lower().replace(" ", "_")
+
+
+def _load_metadata(directory: Path) -> Dict[str, Any]:
+    meta_path = directory / "metadata.json"
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _locate_instruction(directory: Path, explicit_name: Optional[str] = None) -> Optional[Path]:
+    if explicit_name:
+        candidate = directory / explicit_name
+        if candidate.exists():
+            return candidate
     for name in ("instruction.txt", "Instruction.txt", "Instructions.txt"):
-        candidate = CONSULTANT_DIR / name
+        candidate = directory / name
         if candidate.exists():
             return candidate
     return None
 
 
-instr_path = _instruction_path()
-if instr_path:
-    instructions = instr_path.read_text(encoding="utf-8").strip()
-else:
-    instructions = "You are the Agent_iWant_GPT assistant."
+def _gather_resource_files(directory: Path, ignore: Optional[List[str]] = None) -> List[str]:
+    ignore = ignore or []
+    resources: List[str] = []
+    for item in directory.iterdir():
+        if not item.is_file():
+            continue
+        if item.name in ignore:
+            continue
+        resources.append(str(item))
+    return sorted(resources)
 
 
-if CONSULTANT_DIR.exists():
-    local_files = [
-        str(f)
-        for f in CONSULTANT_DIR.iterdir()
-        if f.is_file() and f.name.lower() not in {"instruction.txt", "instructions.txt"}
-    ]
-else:
-    local_files = []
+def _load_vector_cache() -> Dict[str, Any]:
+    if not VECTOR_CACHE_PATH.exists():
+        return {}
+    try:
+        return json.loads(VECTOR_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
-def _is_openai_container(container_id: Optional[str]) -> bool:
-    return isinstance(container_id, str) and container_id.startswith("cntr")
+def _save_vector_cache(data: Dict[str, Any]) -> None:
+    VECTOR_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    VECTOR_CACHE_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-CONSULTANTS = {
-    DEFAULT_CONSULTANT_KEY: {
+def _vector_store_exists(vs_id: str) -> bool:
+    if not vs_id:
+        return False
+    retrieve = getattr(client.vector_stores, "retrieve", None)
+    if retrieve is None:
+        # Older SDKs may not expose retrieve; assume success to avoid thrashing.
+        return True
+    try:
+        retrieve(vs_id)
+        return True
+    except Exception:
+        return False
+
+
+def _file_signature(paths: List[str]) -> List[Dict[str, Any]]:
+    signature: List[Dict[str, Any]] = []
+    for raw_path in sorted(paths):
+        p = Path(raw_path)
+        if not p.exists():
+            signature.append({"path": str(p), "missing": True})
+            continue
+        stat = p.stat()
+        signature.append(
+            {
+                "path": str(p),
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        )
+    return signature
+
+
+def _extract_id(obj: Any) -> Optional[str]:
+    if obj is None:
+        return None
+    if hasattr(obj, "id"):
+        return getattr(obj, "id")
+    if isinstance(obj, dict):
+        return obj.get("id")
+    if hasattr(obj, "to_dict"):
+        data = obj.to_dict()
+        if isinstance(data, dict):
+            return data.get("id")
+    return None
+
+
+def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> None:
+    for filepath in files:
+        path = Path(filepath)
+        if not path.exists():
+            print(f"[consultants] Skipping missing file {filepath}")
+            continue
+        with path.open("rb") as handle:
+            uploaded = client.files.create(
+                file=(path.name, handle, "application/octet-stream"),
+                purpose="assistants",
+            )
+        file_id = _extract_id(uploaded)
+        if not file_id:
+            raise RuntimeError(f"Failed to upload file {filepath}: missing id")
+        client.vector_stores.files.create(vector_store_id=vs_id, file_id=file_id)
+
+
+def _create_vector_store_for(display_name: str, key: str) -> str:
+    vs = client.vector_stores.create(name=f"{display_name} ({key}) resources")
+    vs_id = _extract_id(vs)
+    if not vs_id:
+        raise RuntimeError("Vector store creation returned object without id")
+    return vs_id
+
+
+def _initialize_vector_stores(registry: Dict[str, Dict[str, Any]]) -> None:
+    cache = _load_vector_cache()
+    updated = False
+
+    for key, meta in registry.items():
+        local_files = meta.get("local_files") or []
+        if not local_files:
+            continue
+
+        cached = cache.get(key) or {}
+        cached_vs = cached.get("vector_store_id") or meta.get("vector_store_id")
+        cached_signature = cached.get("file_signature")
+        current_signature = _file_signature(local_files)
+
+        if (
+            cached_vs
+            and cached_signature == current_signature
+            and _vector_store_exists(cached_vs)
+        ):
+            meta["vector_store_id"] = cached_vs
+            continue
+
+        print(f"[consultants] Creating vector store for {key} with {len(local_files)} files…")
+        vs_id = _create_vector_store_for(meta.get("display_name", key), key)
+        _upload_files_to_vector_store(vs_id, local_files)
+        meta["vector_store_id"] = vs_id
+        cache[key] = {"vector_store_id": vs_id, "file_signature": current_signature}
+        updated = True
+
+    if updated:
+        _save_vector_cache(cache)
+
+
+def _discover_consultants() -> Dict[str, Dict[str, Any]]:
+    registry: Dict[str, Dict[str, Any]] = {}
+    if not CONSULTANTS_ROOT.exists():
+        return registry
+
+    for directory in sorted(CONSULTANTS_ROOT.iterdir()):
+        if not directory.is_dir():
+            continue
+        metadata = _load_metadata(directory)
+        key = metadata.get("key") or _slugify(directory.name)
+        instruction_path = _locate_instruction(directory, metadata.get("instruction_file"))
+        if instruction_path:
+            instructions = instruction_path.read_text(encoding="utf-8").strip()
+        else:
+            instructions = metadata.get("instructions", DEFAULT_INSTRUCTION_TEXT)
+
+        ignore_files = ["metadata.json"]
+        if instruction_path:
+            ignore_files.append(instruction_path.name)
+        local_files = _gather_resource_files(directory, ignore_files)
+
+        display_name = metadata.get("display_name") or directory.name
+        aliases = metadata.get("aliases") or []
+        alias_candidates = {
+            key,
+            key.replace("_", " "),
+            directory.name.lower(),
+            display_name.lower(),
+        }
+        alias_candidates.update(alias.strip().lower() for alias in aliases if isinstance(alias, str))
+
+        registry[key] = {
+            "key": key,
+            "display_name": display_name,
+            "instructions": instructions,
+            "model_try": metadata.get("model_try") or DEFAULT_MODELS,
+            "tools": metadata.get("tools") or [{"type": "file_search"}],
+            "local_files": local_files,
+            "aliases": sorted(alias_candidates),
+            "keywords": [kw.lower() for kw in metadata.get("keywords", []) if isinstance(kw, str)],
+            "vector_store_id": metadata.get("vector_store_id"),
+        }
+    return registry
+
+
+CONSULTANTS = _discover_consultants()
+if not CONSULTANTS:
+    CONSULTANTS = {
+        "agent_iwant_gpt": {
+            "key": "agent_iwant_gpt",
+        "display_name": "Agent iWant GPT",
+        "instructions": DEFAULT_INSTRUCTION_TEXT,
         "model_try": DEFAULT_MODELS,
         "tools": [{"type": "file_search"}],
-        "instructions": instructions,
-        "local_files": local_files,
-        "rubric_files": [],
-        "default_files": [],
+        "local_files": [],
+            "aliases": ["agent iwant", "agent_iwant_gpt"],
+            "keywords": [],
+        }
     }
-}
+
+_initialize_vector_stores(CONSULTANTS)
+
+
+DEFAULT_CONSULTANT_KEY = os.getenv("DEFAULT_CONSULTANT_KEY") or next(iter(CONSULTANTS.keys()))
+
+
+def list_consultants() -> List[Dict[str, Any]]:
+    """Return lightweight consultant metadata for UI consumption."""
+    items: List[Dict[str, Any]] = []
+    for meta in CONSULTANTS.values():
+        items.append(
+            {
+                "key": meta["key"],
+                "display_name": meta.get("display_name", meta["key"]),
+                "aliases": meta.get("aliases", []),
+                "keywords": meta.get("keywords", []),
+                "local_files": meta.get("local_files", []),
+                "vector_store_id": meta.get("vector_store_id"),
+            }
+        )
+    return items
 
 
 def run_consultant_response(
@@ -61,51 +261,64 @@ def run_consultant_response(
     container_id: Optional[str] = None,
     consultant_key: str = DEFAULT_CONSULTANT_KEY,
 ):
-    """Run the single test consultant on user_text."""
-    meta = CONSULTANTS[consultant_key]
-    models = meta["model_try"]
-    last_err = None
+    if consultant_key not in CONSULTANTS:
+        raise ValueError(f"Unknown consultant key: {consultant_key}")
 
+    meta = CONSULTANTS[consultant_key]
+    models = meta.get("model_try") or DEFAULT_MODELS
     base_tools = list(meta.get("tools", []) or [])
+
     request_tools = []
     for tool in base_tools:
         t = dict(tool)
         tool_type = t.get("type")
         if tool_type == "file_search":
-            if vector_store_id:
-                t["vector_store_ids"] = t.get("vector_store_ids") or [vector_store_id]
-            else:
+            ids = list(t.get("vector_store_ids") or [])
+            consultant_vs = meta.get("vector_store_id")
+            if consultant_vs and consultant_vs not in ids:
+                ids.append(consultant_vs)
+            if vector_store_id and vector_store_id not in ids:
+                ids.append(vector_store_id)
+            if not ids:
                 continue
-        if tool_type == "code_interpreter":
+            t["vector_store_ids"] = ids
+        if tool_type == "code_interpreter" and not container_id:
             continue
+        if tool_type == "code_interpreter" and container_id:
+            t["container"] = container_id
         request_tools.append(t)
 
+    last_err: Optional[Exception] = None
     for model in models:
         try:
-            print(f'[consultant] calling Responses API with model {model} and {len(request_tools)} tools…')
-            extra_kwargs = {"tools": request_tools}
-
+            print(
+                f"[consultant:{consultant_key}] calling Responses API with model {model} and {len(request_tools)} tools…"
+            )
             resp = client.responses.create(
                 model=model,
                 input=[
                     {"role": "system", "content": meta["instructions"]},
                     {"role": "user", "content": user_text},
                 ],
-                **extra_kwargs,
+                tools=request_tools or None,
             )
-
             text_out = getattr(resp, "output_text", "") or ""
-            print('[consultant] received response successfully.')
             file_ids = getattr(resp, "output_file_ids", None) or []
+            print(f"[consultant:{consultant_key}] received response successfully.")
             return {
                 "model": model,
                 "text": text_out,
                 "file_ids": file_ids,
                 "consultant": consultant_key,
+                "display_name": meta.get("display_name", consultant_key),
+                "local_files": meta.get("local_files", []),
+                "vector_store_id": meta.get("vector_store_id"),
             }
-        except Exception as e:
-            print(f'[consultant] model {model} call failed: {e}')
-            last_err = e
+        except Exception as exc:  # pragma: no cover - diagnostic logging
+            print(f"[consultant:{consultant_key}] model {model} call failed: {exc}")
+            last_err = exc
             continue
 
-    raise last_err
+    if last_err:
+        raise last_err
+    raise RuntimeError("Consultant execution failed without exception context")
