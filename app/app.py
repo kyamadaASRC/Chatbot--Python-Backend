@@ -21,7 +21,7 @@ CONTAINER_ROOT.mkdir(parents=True, exist_ok=True)
 CONTAINERS = {}
 CONTAINER_FILES = {}
 
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4.1-mini")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = (
     "You are a helpful assistant. Reply conversationally and keep answers concise "
     "unless the user asks for more detail."
@@ -145,14 +145,12 @@ def create_app() -> Flask:
             text = "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
         meta = CONSULTANTS.get(consultant_key, {})
-        consultant_vs_id = meta.get("vector_store_id") or result.get("vector_store_id")
         tool_args = {
             "question": message,
             "project": project,
             "vector_store_id": vector_store_id,
             "container_id": container_id,
             "consultant_key": consultant_key,
-            "consultant_vector_store_id": consultant_vs_id,
         }
         tool_name = f"{CONSULTANT_TOOL_PREFIX}{consultant_key}"
         call_stub = {
@@ -174,7 +172,6 @@ def create_app() -> Flask:
             "model": result.get("model"),
             "file_ids": file_ids,
             "resources": meta.get("local_files", []),
-            "consultant_vector_store_id": consultant_vs_id,
             "output": [call_stub, response_stub],
         }
 
