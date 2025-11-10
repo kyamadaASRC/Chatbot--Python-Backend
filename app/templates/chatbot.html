@@ -149,6 +149,7 @@
                 messageSend: "{{ url_for('static', filename='img/message-send.svg') }}",
                 messageStop: "{{ url_for('static', filename='img/message-stop.svg') }}"
             };
+            window.CHAT_MODEL = {{ config.get('CHAT_MODEL', 'gpt-4.1-mini')|tojson }};
         </script>
         <!-- Main chatbot logic -->
         <script type="module" src="{{ url_for('static', filename='js/main.js') }}">

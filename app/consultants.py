@@ -6,6 +6,7 @@ from typing import Optional
 from app.openai_client import client
 
 DEFAULT_MODELS = ["gpt-5", "gpt-4.1"]
+DEFAULT_CONSULTANT_KEY = "agent_iwant_gpt"
 
 BASE_DIR = Path(__file__).resolve().parent
 CONSULTANT_DIR = BASE_DIR / "consultants" / "Agent_iWant_GPT"
@@ -43,7 +44,7 @@ def _is_openai_container(container_id: Optional[str]) -> bool:
 
 
 CONSULTANTS = {
-    "agent_iwant_gpt": {
+    DEFAULT_CONSULTANT_KEY: {
         "model_try": DEFAULT_MODELS,
         "tools": [{"type": "file_search"}],
         "instructions": instructions,
@@ -55,10 +56,13 @@ CONSULTANTS = {
 
 
 def run_consultant_response(
-    user_text: str, vector_store_id: Optional[str] = None, container_id: Optional[str] = None
+    user_text: str,
+    vector_store_id: Optional[str] = None,
+    container_id: Optional[str] = None,
+    consultant_key: str = DEFAULT_CONSULTANT_KEY,
 ):
     """Run the single test consultant on user_text."""
-    meta = CONSULTANTS["agent_iwant_gpt"]
+    meta = CONSULTANTS[consultant_key]
     models = meta["model_try"]
     last_err = None
 
@@ -93,7 +97,12 @@ def run_consultant_response(
             text_out = getattr(resp, "output_text", "") or ""
             print('[consultant] received response successfully.')
             file_ids = getattr(resp, "output_file_ids", None) or []
-            return {"model": model, "text": text_out, "file_ids": file_ids}
+            return {
+                "model": model,
+                "text": text_out,
+                "file_ids": file_ids,
+                "consultant": consultant_key,
+            }
         except Exception as e:
             print(f'[consultant] model {model} call failed: {e}')
             last_err = e

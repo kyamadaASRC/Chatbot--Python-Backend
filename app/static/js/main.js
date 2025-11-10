@@ -112,19 +112,22 @@ function setInputDisabled(disabled) {
 // Extract assistant text from Responses API payload (robust to shape variants)
 function extractAssistantText(data) {
   if (!data) return "";
-  // Common path: output[1].content[0].text
+  const direct = typeof data.text === "string" ? data.text.trim() : "";
+  if (direct) return direct;
+  if (data.mode === "consultant" && data.consultant_notes) {
+    const values = Object.values(data.consultant_notes || {}).filter((v) => typeof v === "string" && v.trim());
+    if (values.length) return values[values.length - 1].trim();
+  }
   const item1 = data.output?.[1]?.content?.[0]?.text;
   if (typeof item1 === "string" && item1.trim()) return item1;
-
-  // Fallback: search any output_text
   const outputs = Array.isArray(data.output) ? data.output : [];
   for (const o of outputs) {
     if (Array.isArray(o.content)) {
       for (const c of o.content) {
-        if (c?.text) return c.text;
+        if (typeof c?.text === "string" && c.text.trim()) return c.text;
       }
     }
-    if (o?.text) return o.text;
+    if (typeof o?.text === "string" && o.text.trim()) return o.text;
   }
   return "";
 }
@@ -527,7 +530,10 @@ scrollDownBtn?.addEventListener("click", () => {
   } catch (err) {
     removeSpinner(spinner);
     console.error("OpenAI error:", err);
-    renderSystemMessage("⚠️ " + "User has cancelled request.");
+    const message = err?.message ? `⚠️ ${err.message}` : "⚠️ Request failed.";
+    renderSystemMessage(message);
+    isGenerating = false;
+    setInputDisabled(false);
   }
 }
 

@@ -1,7 +1,7 @@
 // modules/chatSession.js
 import { fetchWithDiagnostics } from "./utils.js";
 
-const LOCAL_API_BASE = window.LOCAL_API_BASE || "http://localhost:5001";
+const LOCAL_API_BASE = window.LOCAL_API_BASE || window.location.origin || "http://127.0.0.1:5001";
 const apiUrl = (path = "") => `${LOCAL_API_BASE}${path}`;
 
 export class ChatSessionManager {
@@ -276,21 +276,27 @@ export class ChatSessionManager {
         .join("\n");
 
         const summaryPrompt = `Summarize the following chat in 5 words or fewer:\n\n${text}`;
+        const summaryModel = this.model || window.CHAT_MODEL || "gpt-4.1-mini";
+        if (!summaryModel) {
+            console.warn("⚠️ No summary model configured; skipping title update.");
+            return;
+        }
         const payload = {
-        model: this.model,
-        input: [
-            { role: "user", content: summaryPrompt }
-        ]
+            model: summaryModel,
+            input: [
+                { role: "user", content: summaryPrompt }
+            ]
         };
 
         try {
-            const data = await fetchWithDiagnostics(apiUrl("/v1/responses"), {
+            const res = await fetchWithDiagnostics(apiUrl("/v1/responses"), {
                 method: "POST",
                 headers: {
-                "Content-Type": "application/json"
+                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify(payload)
             });
+            const data = await res.json().catch(() => ({}));
 
             const title = data.output?.[0]?.content?.[0]?.text?.trim() || session.name;
             session.name = title;
@@ -323,8 +329,13 @@ export class ChatSessionManager {
         console.log('Requesting chat title summary…');
         const text = convo.slice(0, 6).map(m => `${m.role}: ${m.content}`).join("\n");
         const summaryPrompt = `Summarize the following chat in 5 words or fewer:\n\n${text}`;
+        const summaryModel = this.model || window.CHAT_MODEL || "gpt-4.1-mini";
+        if (!summaryModel) {
+            console.warn("⚠️ No summary model configured; skipping title update.");
+            return;
+        }
         const payload = {
-            model: this.model,
+            model: summaryModel,
             input: [
                 { role: "system", content: "Create a short, descriptive title." },
                 { role: "user", content: summaryPrompt }

@@ -2,13 +2,12 @@ import io
 import os
 import uuid
 from pathlib import Path
+from typing import Optional
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import shutil
 
-from app.executor import execute_plan
-from app.planner import plan_pipeline
-from app.router import route_capabilities
+from app.consultants import run_consultant_response, DEFAULT_CONSULTANT_KEY
 from app.openai_client import client
 
 
@@ -16,6 +15,37 @@ CONTAINER_ROOT = Path(os.environ.get("CONTAINER_STORAGE", "./artifacts/container
 CONTAINER_ROOT.mkdir(parents=True, exist_ok=True)
 CONTAINERS = {}
 CONTAINER_FILES = {}
+
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4.1-mini")
+GENERAL_CHAT_SYSTEM = (
+    "You are a helpful assistant. Reply conversationally and keep answers concise "
+    "unless the user asks for more detail."
+)
+CONSULTANT_TOOL_NAME = "call_consultant"
+CONSULTANT_KEYWORDS = {
+    "psc",
+    "naics",
+    "pws",
+    "sow",
+    "soo",
+    "requirements doc",
+    "requirement",
+    "acquisition",
+    "contract",
+    "market research",
+    "sources sought",
+    "ige",
+    "rs-ca",
+    "rs ca",
+    "dd254",
+    "fedramp",
+    "triage",
+    "agent iwant",
+    "consultant",
+    "ko",
+    "procurement",
+}
+
 
 
 def _serialize(obj):
@@ -35,6 +65,81 @@ def create_app() -> Flask:
         return render_template("chatbot.html")
 
 
+    def _should_use_consultant(message: str) -> bool:
+        msg = (message or "").lower()
+        if "agent iwant" in msg or "consultant" in msg:
+            return True
+        matches = sum(1 for kw in CONSULTANT_KEYWORDS if kw in msg)
+        return matches >= 2
+
+
+    def _extract_text(resp) -> str:
+        text = getattr(resp, "output_text", None)
+        if isinstance(text, list):
+            text = text[0] if text else ""
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+        for output in getattr(resp, "output", []) or []:
+            if isinstance(output, dict):
+                contents = output.get("content")
+                if isinstance(contents, list):
+                    for c in contents:
+                        val = c.get("text") if isinstance(c, dict) else None
+                        if isinstance(val, str) and val.strip():
+                            return val.strip()
+                txt = output.get("text")
+                if isinstance(txt, str) and txt.strip():
+                    return txt.strip()
+        choices = getattr(resp, "choices", None)
+        if choices:
+            msg = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+            val = msg.get("content")
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+
+
+    def _consultant_tool_call(
+        message: str,
+        project: str,
+        vector_store_id: Optional[str],
+        container_id: Optional[str],
+    ):
+        result = run_consultant_response(
+            message,
+            vector_store_id=vector_store_id,
+            container_id=container_id,
+        )
+        text = (result.get("text") or "").strip()
+        if not text:
+            text = "The consultant returned no notes."
+        file_ids = result.get("file_ids") or []
+        tool_args = {
+            "question": message,
+            "project": project,
+            "vector_store_id": vector_store_id,
+            "container_id": container_id,
+        }
+        call_stub = {
+            "type": "function_call",
+            "name": CONSULTANT_TOOL_NAME,
+            "arguments": tool_args,
+        }
+        response_stub = {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}],
+        }
+        return {
+            "text": text,
+            "mode": "consultant",
+            "tool_name": CONSULTANT_TOOL_NAME,
+            "consultant": result.get("consultant", DEFAULT_CONSULTANT_KEY),
+            "model": result.get("model"),
+            "file_ids": file_ids,
+            "output": [call_stub, response_stub],
+        }
+
     @app.route("/chat", methods=["POST"])
     def chat():
         data = request.get_json(force=True)
@@ -45,22 +150,25 @@ def create_app() -> Flask:
         if not msg:
             return jsonify({"error": "Missing message"}), 400
 
-        draft = route_capabilities(msg)
-        batches = plan_pipeline(draft)
-        out = execute_plan(
-            project,
-            batches,
-            msg,
-            vector_store_id=vector_store_id,
-            container_id=container_id,
-        )
+        if _should_use_consultant(msg):
+            try:
+                payload = _consultant_tool_call(msg, project, vector_store_id, container_id)
+                return jsonify(payload)
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
 
-        return jsonify({
-            "draft": draft,
-            "batches": batches,
-            "consultant_notes": out["notes"],
-            "warnings": out["warnings"],
-        })
+        try:
+            resp = client.responses.create(
+                model=CHAT_MODEL,
+                input=[
+                    {"role": "system", "content": GENERAL_CHAT_SYSTEM},
+                    {"role": "user", "content": msg},
+                ],
+            )
+            text = _extract_text(resp) or "I wasn't able to produce a response."
+            return jsonify({"text": text, "mode": "direct"})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/v1/vector_stores", methods=["POST"])
     def create_vector_store():
