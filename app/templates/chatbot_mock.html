@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Mock</title>
+    <link rel="stylesheet" href="bootstrap.min.css">
+    <style>
+        /* ...existing styles from chatbot.html... */
+        body { background: #f8f9fa; }
+        #sidebar { width: 220px; background: #fff; border-right: 1px solid #ddd; position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; }
+        #chat-container { margin-left: 220px; padding: 24px; }
+        .user-text-bubble { background: #007bff; color: #fff; padding: 8px 16px; border-radius: 16px; margin: 8px 0; max-width: 70%; align-self: flex-end; }
+        .assistant-text-bubble { background: #e9ecef; color: #333; padding: 8px 16px; border-radius: 16px; margin: 8px 0; max-width: 70%; align-self: flex-start; }
+        #chat-history { max-height: 60vh; overflow-y: auto; }
+        #edit-field { width: 100%; resize: none; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <button id="new-chat-button">+ New Chat</button>
+        <div id="file-list"></div>
+        <input type="file" id="file-upload-input" style="display:none" multiple>
+        <button id="file-upload-btn">Upload File</button>
+    </div>
+    <div id="chat-container">
+        <div id="chat-box">
+            <div id="chat-history"></div>
+        </div>
+        <textarea id="edit-field" rows="2" placeholder="Type your message..."></textarea>
+        <button id="send-stop-button">Send</button>
+    </div>
+    <script>
+        // Mock file storage
+        let mockFiles = [];
+        function renderFileList() {
+            const fileList = document.getElementById('file-list');
+            fileList.innerHTML = '';
+            mockFiles.forEach((file, idx) => {
+                const div = document.createElement('div');
+                div.textContent = file.name;
+                div.style.display = 'flex';
+                div.style.justifyContent = 'space-between';
+                div.style.alignItems = 'center';
+                div.style.padding = '4px 0';
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Delete';
+                delBtn.onclick = () => {
+                    mockFiles.splice(idx, 1);
+                    renderFileList();
+                };
+                div.appendChild(delBtn);
+                fileList.appendChild(div);
+            });
+        }
+        document.getElementById('file-upload-btn').onclick = function() {
+            document.getElementById('file-upload-input').click();
+        };
+        document.getElementById('file-upload-input').onchange = function(e) {
+            for (const file of e.target.files) {
+                mockFiles.push(file);
+            }
+            renderFileList();
+        };
+        // Mock chat logic
+        function sendPromptWithFiles(prompt) {
+            // Show user bubble
+            const container = document.createElement('div');
+            container.style.display = 'flex';
+            container.style.justifyContent = 'flex-end';
+            const userBubble = document.createElement('div');
+            userBubble.className = 'user-text-bubble';
+            userBubble.textContent = prompt;
+            container.appendChild(userBubble);
+            document.getElementById('chat-history').appendChild(container);
+            // Simulate assistant response
+            setTimeout(() => {
+                const container = document.createElement('div');
+                container.style.display = 'flex';
+                container.style.justifyContent = 'flex-start';
+                const assistantBubble = document.createElement('div');
+                assistantBubble.className = 'assistant-text-bubble';
+                assistantBubble.textContent = mockAssistantReply(prompt);
+                container.appendChild(assistantBubble);
+                document.getElementById('chat-history').appendChild(container);
+            }, 800);
+        }
+        function mockAssistantReply(prompt) {
+            if (mockFiles.length > 0) {
+                return `You asked: "${prompt}". I see you uploaded: ${mockFiles.map(f => f.name).join(', ')}.`;
+            } else {
+                return `You asked: "${prompt}". (No files uploaded.)`;
+            }
+        }
+        function sendPrompt(prompt) {
+            sendPromptWithFiles(prompt);
+        }
+        document.getElementById('send-stop-button').onclick = function() {
+            const prompt = document.getElementById('edit-field').value.trim();
+            if (prompt) {
+                sendPrompt(prompt);
+                document.getElementById('edit-field').value = '';
+            }
+        };
+        document.getElementById('edit-field').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                const prompt = document.getElementById('edit-field').value.trim();
+                if (prompt) {
+                    sendPrompt(prompt);
+                    document.getElementById('edit-field').value = '';
+                }
+            }
+        });
+        // Initial render
+        renderFileList();
+    </script>
+</body>
+</html>

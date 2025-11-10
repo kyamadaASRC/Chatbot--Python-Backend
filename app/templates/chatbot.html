@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Sample Chat Interface</title>
+        <!-- <link href="bootstrap.min.css" rel="stylesheet"> -->
+        <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+        <!-- <link href="styles.css" rel="stylesheet"> -->
+        <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+        <script src="https://cdn.jsdelivr.net/npm/marked-highlight/lib/index.umd.js"></script>
+        <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+        <script src="{{ url_for('static', filename='js/pdf.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/pdf_worker.js') }}"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+        <!-- PDF generation via pdfmake (for high-fidelity text rendering) -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-pdfmake/2.4.1/html-to-pdfmake.min.js"></script>
+        <!-- DOCX and XLSX parsers (browser) -->
+
+
+    </head>
+    <body>
+        <!-- Main App Layout -->
+        <div id="app" class="d-flex flex-row">
+            <!-- Sidebar -->
+                <aside id="sidebar" class="d-flex flex-column p-2 gap-2">
+                    <div class="sidebar-header d-flex flex-column gap-2" style="position:relative;">
+                        <!-- Logo -->
+                        <img id="logo" src="{{ url_for('static', filename='img/company-logo.svg') }}" alt="company-logo" width="75" height="75">
+
+                        <!-- New Chat Button -->
+                        <div id="new-chat-button"
+                            class="sidebar-button d-flex flex-row align-items-center p-3 gap-2"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="right"
+                            title="New Chat">
+                        <img class="button-icon" src="{{ url_for('static', filename='img/new-chat.svg') }}" alt="new-chat">
+                        <span class="button-text text-white">New Chat</span>
+                        </div>
+
+                        <!-- Collapse Sidebar Button -->
+                        <button id="collapse-sidebar-btn" title="Collapse sidebar" aria-label="Collapse sidebar"
+                                style="position:absolute; top:8px; right:8px; background:transparent; border:none; color:#bbb; cursor:pointer;">
+                            <i class="bi bi-chevron-double-left"></i>
+                        </button>
+                    </div>
+
+                    <div class="sidebar-content d-flex flex-column gap-2">
+                    <!-- FILES SECTION -->
+                    <div class="sidebar-section">
+                        <button id="file-toggle" class="section-file-toggle btn w-100 text-start d-flex justify-content-between align-items-center" 
+                                style="color: white;"
+                                type="button"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#Filecollapse"
+                                aria-expanded="false"
+                                aria-controls="Filecollapse">
+                            <span class="section-title">Files</span>
+                            <span class="chevron">></span>
+                        </button>
+
+                        <div class="collapse" id="Filecollapse">
+                            <div id="uploaded-file-list" class="ps-3 pt-2">
+                            <!-- Dynamically populated file list -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CHATS SECTION -->
+                    <div class="sidebar-section">
+                    <button class="section-chat-toggle btn w-100 text-start d-flex justify-content-between align-items-center"
+                            style="color: white;"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#Chatcollapse"
+                            aria-expanded="true"
+                            aria-controls="Chatcollapse">
+                        <span class="section-title">Chats</span>
+                        <span class="chevron">></span>
+                    </button>
+
+                    <div class="collapse show" id="Chatcollapse">
+                        <div id="chat-session-list" class="ps-3 pt-2">
+                        <!-- Dynamically populated chat list -->
+                        </div>
+                    </div>
+                    <!-- Text Stream Switch-->
+                     <div id="stream-toggle" style="display: none;">
+                        <label class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckDefault">
+                            <label class="form-check-label" for="flexSwitchCheckDefault">Text Stream Mode</label>
+                    </div>
+                    </div><!-- /.sidebar-content -->
+                    </div>
+                </aside>
+                
+            
+            <!-- Chat Interface -->
+            <div id="chat-interface" class="d-flex flex-column justify-content-center align-items-center flex-grow-1 p-3">
+                <div id="chat-header" class="w-100 text-start">
+                    <h4 class="text-white">OpenAi API Chatbot</h4>
+                </div>
+                <div id="chat-history" class="flex-grow-1 d-flex flex-column p-3 gap-3">
+                </div>
+                <!-- Toasts centered above chat box -->
+                <div id="toast-container" class="toast-container"></div>
+                <img id="scroll-down-btn" style="display: none;" src="{{ url_for('static', filename='img/down-arrow.svg') }}" width="40px" height="40px">
+                <div id="chat-box" class="flex-shrink-0 d-flex flex-row align-items-center justify-content-center p-3 gap-3">
+
+                    <!-- OpenAI file upload form -->
+                    <form id="openai-file-upload-form" enctype="multipart/form-data" style="display:inline;">
+                        <input type="file" id="openai-file-upload-input" name="file" multiple= "true" style="display:none;">
+                        <button type="button" id="openai-file-upload-btn" class="btn btn-secondary" title="Upload file" style="border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; padding: 0;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 16v-8m0 0l-4 4m4-4l4 4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                                <circle cx="12" cy="12" r="10" stroke="#fff" stroke-width="2" fill="none"/>
+                            </svg>
+                        </button>
+                    </form>
+                    <textarea id="edit-field" class="flex-grow-1 text-white" rows="1" placeholder="Type your message..." autocomplete="off"></textarea>
+                    <img id="send-stop-button" src="{{ url_for('static', filename='img/message-send.svg') }}" width="40px" height="40px">
+                </div>
+            </div>
+        </div>
+    </div>
+        
+        <!-- File Preview Modal -->
+        <div id="file-preview-modal" style="display:none; position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:4000; align-items:center; justify-content:center;">
+            <div id="file-preview-content" style="background:#1f1f1f; color:#e5e5e5; width:min(900px, 92vw); height:min(80vh, 800px); border-radius:10px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.4); position:relative; display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#262626;">
+                    <span id="file-preview-title" style="font-weight:600;">Preview</span>
+                    <button id="file-preview-close" style="background:none; border:none; color:#e5e5e5; font-size:20px; cursor:pointer;">&times;</button>
+                </div>
+                <div id="file-preview-body" style="flex:1 1 auto; overflow:auto; background:#111;"></div>
+            </div>
+        </div>
+
+        <script>
+            window.STATIC_ASSETS = {
+                messageSend: "{{ url_for('static', filename='img/message-send.svg') }}",
+                messageStop: "{{ url_for('static', filename='img/message-stop.svg') }}"
+            };
+        </script>
+        <!-- Main chatbot logic -->
+        <script type="module" src="{{ url_for('static', filename='js/main.js') }}">
+
+        </script>
+    </body>
+</html>

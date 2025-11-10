@@ -1,0 +1,76 @@
+*** Begin Patch
+*** Update File: app/app.py
+@@
+-import os
+-from flask import Flask, request, jsonify
+-from router import route_capabilities
+-from planner import plan_pipeline
+-from executor import execute_plan
+-from app.openai_client import client
+-from app.consultants import run_consultant_response
+-
+-app = Flask(__name__)
+-
+-
+-@app.route("/chat", methods=["POST"])
+-def chat():
+-    data = request.get_json(force=True)
+-    msg = data.get("message", "").strip()
+-    project = data.get("project", "demo-project")
+-    if not msg:
+-        return jsonify({"error": "Missing message"}), 400
+-
+-
+-    draft = route_capabilities(msg)
+-    batches = plan_pipeline(draft)
+-    out = execute_plan(project, batches, msg)
+-
+-
+-    return jsonify({
+-        "draft": draft,
+-        "batches": batches,
+-        "consultant_notes": out["notes"],
+-        "warnings": out["warnings"],
+-    })
+-
+-
+-if __name__ == "__main__":
+-    app.run(port=5001, debug=True)
++from flask import Flask, request, jsonify
++
++from app.executor import execute_plan
++from app.planner import plan_pipeline
++from app.router import route_capabilities
++
++
++def create_app() -> Flask:
++    app = Flask(__name__)
++
++    @app.route("/chat", methods=["POST"])
++    def chat():
++        data = request.get_json(force=True)
++        msg = data.get("message", "").strip()
++        project = data.get("project", "demo-project")
++        if not msg:
++            return jsonify({"error": "Missing message"}), 400
++
++        draft = route_capabilities(msg)
++        batches = plan_pipeline(draft)
++        out = execute_plan(project, batches, msg)
++
++        return jsonify({
++            "draft": draft,
++            "batches": batches,
++            "consultant_notes": out["notes"],
++            "warnings": out["warnings"],
++        })
++
++    return app
++
++
++app = create_app()
++
++
++if __name__ == "__main__":
++    app.run(port=5001, debug=True)
+*** End Patch

@@ -1,0 +1,875 @@
+:root {
+    --sidebar-bg: #181818;
+    --panel: #202123;
+    --sidebar-width: 280px; /* updated from JS when collapsed/expanded */
+    --chat-header-height: 56px;
+    /* shared timing values (used across sidebar animations) */
+    --sidebar-duration: 300ms;
+    --sidebar-ease: ease;
+    --sidebar-transition: var(--sidebar-duration) var(--sidebar-ease);
+    --fast-duration: 150ms;
+    --fast-ease: ease;
+    --fast-transition: var(--fast-duration) var(--fast-ease);
+    /* legacy variable used by chevrons (kept for compatibility) */
+    --transition: 200ms cubic-bezier(.2,.9,.2,1);
+}
+/* Chatbot UI Styles*/
+/* Sidebar container */
+#sidebar {
+    /* Sidebar (visual order)
+        - container
+        - collapsed / expanded states
+        - header (logo, new chat)
+        - section headers (Files / Chats)
+        - content lists and items
+        - controls (buttons, menus)
+    */
+    background: linear-gradient(180deg,var(--sidebar-bg),var(--panel));
+    transition: width var(--sidebar-transition), padding var(--sidebar-transition), flex-basis var(--sidebar-transition);
+    min-height: 100%;
+    max-width: 280px;
+    /* Sidebar uses internal layout for scrolling */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-sizing: border-box; /* include padding in width calculations */
+    min-width: 0; /* allow flex item to shrink below its content width when needed */
+    flex: 0 0 280px; /* default flex-basis for sidebar (expanded size) */
+    position: relative; /* establish stacking context for z-index */
+    z-index: 2000; /* ensure menus sit above chat panel */
+}
+
+/* Collapse button only visible when expanded */
+#sidebar.collapsed #collapse-sidebar-btn { display: none; }
+
+/* In collapsed state, make the logo act as the expand control */
+#sidebar.collapsed #logo { cursor: pointer; }
+
+/* Constrain overall app to viewport height so inner panes scroll instead of growing */
+#app { height: 100vh; overflow: hidden; }
+
+/* collapsed / expanded */
+#sidebar.collapsed {
+    width: 100px;
+    flex: 0 0 100px;
+    align-items: flex-start; /* keep items left-aligned */
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    gap: 0.5rem;
+}
+
+#sidebar.expanded { 
+    width: 280px; 
+    flex: 0 0 280px; 
+}
+
+/* Only text nodes should shrink horizontally - animate using shared timing */
+#sidebar.collapsed .sidebar-button span,
+#sidebar.collapsed .chat-session-item .session-name {
+    opacity: 0;
+    overflow: hidden;
+    transition: opacity var(--sidebar-transition), 
+                max-width var(--sidebar-transition), 
+                transform var(--sidebar-transition);
+    max-width: 0;
+}
+
+#sidebar.expanded .sidebar-button span,
+#sidebar.expanded .chat-session-item .session-name,
+#sidebar:not(.collapsed) .sidebar-button span {
+    opacity: 1;
+    width: auto;
+    height: auto;
+    transition: opacity var(--sidebar-transition), 
+    max-width var(--sidebar-transition);
+}
+
+/* Logo (top of sidebar) */
+
+#scroll-down-btn:hover{
+    cursor: pointer;
+}
+
+#chat-interface {
+    position: relative;
+    /* Ensure children stretch so the scrollable history fills the panel */
+    align-items: stretch; /* override align-items:center from HTML classes */
+    justify-content: flex-start; /* avoid vertical centering of the stack */
+    /* Make the entire chat panel scroll, so the scrollbar sits at the far edge */
+    overflow-y: auto;
+}
+
+#scroll-down-btn {
+    position: absolute;
+    bottom: calc(80px + 1.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    pointer-events: auto;
+}
+
+/* Hidden state controlled by JS */
+#scroll-down-btn.hidden { display: none; }
+
+/* Section toggles (Files / Chats headers) */
+.section-file-toggle .chevron,
+.section-chat-toggle .chevron {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    transition: transform var(--transition);
+}
+
+.section-file-toggle[aria-expanded="true"] .chevron,
+.section-chat-toggle[aria-expanded="true"] .chevron {
+    transform: rotate(90deg);
+    opacity: 1;
+}
+
+/* Content sections: Uploaded files */
+#uploaded-file-list {
+    margin-top: 16px;
+    margin-bottom: 16px;
+    padding-left: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: none;
+}
+
+.uploaded-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #232323;
+    color: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #333);
+    padding: 6px 12px;
+    font-size: 16px;
+    overflow: hidden;
+    transition: opacity var(--sidebar-transition), 
+                transform var(--sidebar-transition);
+}
+
+/* make filename shrink properly and truncate with ellipsis */
+.uploaded-file-item span {
+  flex: 1;
+  min-width: 0; /* ✅ required so text-overflow can work in flex */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9rem;
+  color: var(--text-color, #ddd);
+}
+
+.uploaded-file-item span { cursor: pointer; }
+.uploaded-file-item span:hover { text-decoration: underline; }
+
+.uploaded-file-item .delete-file-btn { 
+    flex-shrink: 0;
+    background: none; 
+    border: none; 
+    color: #ff4d4d; 
+    font-size: 20px; 
+    cursor: pointer; 
+    margin-left: 10px; 
+}
+
+.uploaded-file-item .delete-file-btn:hover { 
+    color: #ff0000; 
+}
+
+/* Chat session list */
+#chat-session-list {
+    margin-top: 1rem;
+    padding-left: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Chat bubbles */
+#chat-history .chat-message {
+    width: 100%;
+    display: flex;
+}
+
+#chat-history .chat-message .message-content {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+#chat-history .chat-message.user .message-content {
+    margin-left: auto; /* right-align user message */
+    background: #993535;
+    color: #ffffff;
+}
+
+#chat-history .chat-message.assistant .message-content {
+    margin-right: auto; /* left-align assistant message */
+    background: #2b2b2b; /* dark bubble */
+    color: #ffffff;
+}
+
+#chat-history .chat-message.system .message-content {
+    margin: 0.25rem auto; /* center system messages */
+    background: transparent;
+    color: #b0b0b0;
+    max-width: 80%;
+    padding: 0.25rem 0;
+}
+
+.chat-session-item {
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+    justify-content: space-between;
+    background: #232323;
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background var(--fast-transition), 
+                color var(--fast-transition), 
+                opacity var(--sidebar-transition), 
+                transform var(--sidebar-transition);
+}
+
+/* Keep session items a fixed/minimum height and center-aligned so collapsing
+    the sidebar doesn't allow names to wrap and increase item height. */
+.chat-session-item { min-height: 44px; }
+
+.chat-session-item.active { 
+    background: #6e6e6e; 
+    color: #fff; 
+    font-weight: bold; 
+
+}
+.chat-session-item:hover { 
+    background: #333; 
+}
+
+.chat-session-item.active:hover { 
+    background: #9e9e9e; 
+}
+
+.chat-session-wrapper { 
+    position: absolute; 
+    display: flex; 
+    align-items: center; 
+}
+
+.session-menu-btn {
+    background: none;
+    border: none;
+    color: #525252;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 6px;
+    border-radius: 6px;
+    transition: background-color var(--fast-transition), 
+                color var(--fast-transition);
+}
+
+.session-menu-btn:hover { 
+    background-color: rgba(255,255,255,0.1); 
+    color: #e6eef8; 
+}
+
+/* The dropdown menu */
+.session-menu { 
+    position:absolute; 
+    right:0; left:auto; 
+    top:100%; 
+    background-color:#3b3b3b; 
+    border:1px solid rgba(255,255,255,0.1); 
+    border-radius:6px; 
+    padding:4px 0; 
+    display:flex; 
+    flex-direction:column; 
+    min-width:120px; 
+    box-shadow:0 4px 12px rgba(0,0,0,0.3); 
+    z-index:3000; 
+    overflow:visible; 
+}
+
+/* Ensure the immediate wrapper doesn't clip the absolute-positioned menu */
+.session-menu-wrapper { 
+    overflow: visible; 
+}
+
+.session-menu button {
+    background: none;
+    border: none;
+    color: #e6eef8;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    width: 100%;
+    cursor: pointer;
+    transition: background-color var(--fast-transition);
+}
+
+.session-menu button:hover { 
+    background-color: rgba(255,255,255,0.1); 
+}
+
+.delete-session { 
+    color: #ff6b6b; 
+}
+
+.session-name {
+    flex-grow: 1;
+    text-align: left;
+    margin-left: 10px;
+    overflow: hidden;
+    white-space: nowrap;           /* prevent wrapping */
+    text-overflow: ellipsis;       /* show ellipsis when truncated */
+    min-width: 0;                  /* allow flex child to shrink */
+    transition: width var(--sidebar-transition), 
+                opacity var(--sidebar-transition), 
+                height var(--sidebar-transition);
+}
+
+/* Collapsed state: fade/slide out non-essential sections (keeps vertical layout intact)
+     Use translateX to move elements left while keeping vertical position */
+#sidebar.collapsed .sidebar-section,
+#sidebar.collapsed #uploaded-file-list,
+#sidebar.collapsed #chat-session-list,
+#sidebar.collapsed .section-file-toggle,
+#sidebar.collapsed .section-chat-toggle,
+#sidebar.collapsed .uploaded-file-item,
+#sidebar.collapsed .chat-session-item,
+#sidebar.collapsed .session-menu,
+#sidebar.collapsed .session-menu-btn,
+#sidebar.collapsed .chevron,
+#sidebar.collapsed .section-title,
+#sidebar.collapsed .button-text {
+    opacity: 0;
+    transform: translateX(-8px);
+    pointer-events: none; /* make them non-clickable */
+}
+
+/* New Chat button */
+#new-chat-button {
+    display: flex !important;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--sidebar-transition), 
+                transform var(--sidebar-transition);
+}
+
+/* Button text: reveal left-to-right using max-width and opacity */
+#new-chat-button .button-text {
+    opacity: 1;
+    transition: opacity var(--sidebar-transition), 
+                max-width var(--sidebar-transition), 
+                transform var(--sidebar-transition);
+    white-space: nowrap;
+    overflow: hidden;
+    display: inline-block;
+    max-width: 1000px; /* large default; can be tightened */
+    transform-origin: left center; /* reveal left-to-right */
+}
+
+/* Button icon: keep fixed size and avoid visible shrinking */
+#new-chat-button .button-icon {
+    width: 40px;
+    height: 40px;
+    transition: transform var(--sidebar-transition);
+    flex: 0 0 40px; /* keep icon from shrinking/growing */
+    will-change: transform;
+}
+
+/* Collapsed: keep button visible and aligned */
+#sidebar.collapsed #new-chat-button {
+    opacity: 1;
+    pointer-events: auto;
+    align-self: flex-start; /* prevent the button from shifting to center */
+    transform: translateX(0); /* keep button position stable */
+}
+
+/* collapsed/expanded text animation */
+#sidebar.collapsed #new-chat-button .button-text #stream-toggle{
+    max-width: 0;
+    opacity: 0;
+    transform: translateX(-6px) scaleX(0.98);
+}
+
+#sidebar:not(.collapsed) #new-chat-button .button-text #stream-toggle{
+    max-width: 1000px;
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+}
+
+/* Generic: ensure sidebar children animate consistently using shared vars */
+#sidebar .sidebar-section,
+#sidebar #uploaded-file-list,
+#sidebar #chat-session-list,
+#sidebar .uploaded-file-item,
+#sidebar .chat-session-item,
+#sidebar .section-file-toggle,
+#sidebar .section-chat-toggle,
+#sidebar .session-menu,
+#sidebar .session-menu-btn,
+#sidebar .chevron,
+#sidebar .section-title,
+#sidebar .button-text,
+#sidebar #stream-toggle {
+    transition: opacity var(--sidebar-transition),
+                max-height var(--sidebar-transition),
+                margin var(--sidebar-transition), padding var(--sidebar-transition),
+                transform var(--sidebar-transition);
+                max-height: 1000px;
+}
+
+/* keep lists scrollable (sidebar handles vertical scrolling) */
+#uploaded-file-list, #chat-session-list { 
+    overflow: visible; 
+}
+
+#stream-toggle {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #ccc;
+  font-size: 0.9rem;
+}
+
+
+/* Main Chat Area Style */
+#app{
+    height: 100vh;
+    width: 100vw;
+    background-color: #212121;
+}
+
+/* Ensure chat area spans to viewport edge (reserve sidebar width via CSS var).
+     The JS keeps --sidebar-width updated to match the current sidebar size. */
+#chat-interface {
+    width: calc(100vw - var(--sidebar-width));
+    max-width: calc(100vw - var(--sidebar-width));
+}
+.tooltip-inner {
+    font-size: 18px;
+}
+#chat-box{
+    min-height: 60px;
+    max-height: 50vh;
+    border-radius: 40px;
+    border: solid 1px gray;
+    display: flex;
+    align-items: flex-end;
+    background: #303030;
+}
+#chat-box.disabled #openai-file-upload-btn, 
+#chat-box.disabled #edit-field, 
+#chat-box.disabled #send-stop-button{
+    pointer-events: none;
+}
+#chat-history, 
+#chat-box{
+    max-width: 48rem;
+    width: 100%;
+}
+#edit-field{
+    flex: 1;
+    resize: none;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    background-color: transparent;
+    outline: none;
+    overflow-y: auto;
+    height: auto;
+    max-height: 200px;
+    min-height: 40px;
+    line-height: 1.5;
+    font-size: 1rem;
+    color: #fff;
+    background: #303030;
+
+}
+#edit-field::selection {
+    background-color: #4a90e2;
+    color: white;
+}
+#send-stop-button:hover{
+    cursor: pointer;
+}
+#chat-box.disabled #send-stop-button {
+  pointer-events: auto; /* ✅ allow clicking */
+  opacity: 1;            /* optional: ensure it's visible */
+}
+#chat-box.generating #edit-field {
+  pointer-events: none;
+}
+#chat-box.generating #send-stop-button {
+  pointer-events: auto;
+}
+
+/* The outer chat interface is the scroll container so the scrollbar sits at the panel edge */
+#chat-interface {
+    position: relative;
+    align-items: stretch; /* ensure children stretch so chat-history fills the panel */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Chat history: center an inner column and let left/right margins expand */
+/* Chat history content stays centered inside the scrollable panel */
+/* Chat history (centered column) */
+#chat-history {
+    /* Let the outer panel handle vertical scroll */
+    overflow-y: visible;
+    overflow-x: hidden;
+    flex: 1 1 auto; /* Allow it to grow and shrink */
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1rem 2rem;
+    padding-top: calc(1rem + var(--chat-header-height)); /* avoid being covered by sticky header */
+    display: flex;
+    flex-direction: column;
+    align-items: stretch; /* don't center children across entire app width */
+    flex: 1 1 auto; /* allow history to grow and shrink within the panel */
+    /* Let height be governed by parent panel */
+    max-height: none;
+}
+
+/* Each message row (the container appended by JS) should be a full-width
+   column constrained to a readable max-width; this makes the left/right
+   margins expand to fill the viewport while messages remain centered. */
+#chat-history > div {
+    width: 100%;
+    max-width: 48rem; /* constrain message row inside chat interface */
+    margin: 0 auto;   /* center within chat interface, not whole app */
+    display: flex;    /* preserve inline JS layout that sets justify-content */
+    gap: 0.5rem;
+}
+
+/* Ensure message rows have transparent background */
+#chat-history > .chat-message {
+    background: transparent !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Chat bubbles */
+#chat-history .chat-message { width: 100%; display: flex; }
+#chat-history .chat-message .message-content {
+    max-width: 70%;
+    padding: .75rem 1rem;
+    border-radius: 12px;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+#chat-history .chat-message.user .message-content {
+    margin-left: auto; /* right-align user message */
+    background: #9c9c9c; /* user grey bubble */
+    color: #ffffff;
+}
+#chat-history .chat-message.assistant .message-content {
+    /* Full-width assistant message without a bubble */
+    margin: 0;               /* no extra margins */
+    padding: 0;              /* remove bubble padding */
+    border-radius: 0;        /* no rounded bubble */
+    background: transparent; /* no background */
+    color: #e5e5e5;          /* readable text */
+    max-width: 100%;         /* take full row width */
+    width: 100%;             /* stretch to row */
+}
+#chat-history .chat-message.system .message-content {
+    margin: 0.25rem auto; /* center system messages */
+    background: transparent;
+    color: #b0b0b0;
+    max-width: 80%;
+    padding: 0.25rem 0;
+}
+
+/* Spinner should not be stretched to full-width */
+#chat-history > .spinner-grow {
+    width: 2rem;
+    height: 2rem;
+    margin: 1rem 0;
+    display: inline-block
+}
+
+/* Keep the header visible when the outer panel scrolls */
+#chat-interface > #chat-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: transparent; /* inherit panel background */
+}
+
+/* Low-contrast scrollbar by default, higher contrast on hover */
+/* WebKit-based browsers (apply to the panel) */
+#chat-interface::-webkit-scrollbar { width: 10px; }
+#chat-interface::-webkit-scrollbar-track { background: transparent; }
+#chat-interface::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 8px; }
+#chat-interface:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+
+/* Firefox */
+#chat-interface { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.04) transparent; }
+#chat-interface:hover { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+/* Sidebar content area scrolls and uses the same scrollbar style */
+.sidebar-content { flex: 1 1 auto; overflow-y: hidden; overflow-x: hidden; }
+.sidebar-content::-webkit-scrollbar { width: 10px; }
+.sidebar-content::-webkit-scrollbar-track { background: transparent; }
+.sidebar-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 8px; }
+.sidebar-content:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+.sidebar-content { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.04) transparent; }
+.sidebar-content:hover { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+/* Header sits above the scroll area */
+.sidebar-header { flex: 0 0 auto; }
+
+/* Collapse button icon animation */
+#collapse-sidebar-btn i {
+  transition: transform var(--sidebar-transition);
+  transform: rotate(0deg);
+}
+
+/* Briefly rotate to the right during expansion */
+#sidebar.expanding #collapse-sidebar-btn i {
+  transform: rotate(180deg);
+}
+
+/* Make sidebar lists independently scrollable with the same scrollbar styling */
+/* Lists can scroll independently if desired; otherwise they inherit from sidebar-content */
+#uploaded-file-list,
+#chat-session-list { background: transparent; }
+
+/* Independent scrolling for Files and Chats sections */
+#Filecollapse {
+    max-height: 35vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px; /* avoid layout shift when scrollbar appears */
+    background: transparent;
+}
+
+#Chatcollapse {
+    max-height: 50vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 8px; /* avoid layout shift when scrollbar appears */
+    background: transparent;
+}
+
+/* Match scrollbar styling for section scroll areas */
+#Filecollapse::-webkit-scrollbar,
+#Chatcollapse::-webkit-scrollbar { width: 10px; }
+#Filecollapse::-webkit-scrollbar-track,
+#Chatcollapse::-webkit-scrollbar-track { background: transparent; }
+#Filecollapse::-webkit-scrollbar-thumb,
+#Chatcollapse::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 8px; }
+#Filecollapse:hover::-webkit-scrollbar-thumb,
+#Chatcollapse:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+
+#Filecollapse,
+#Chatcollapse { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.04) transparent; }
+#Filecollapse:hover,
+#Chatcollapse:hover { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+/* WebKit scrollbars for lists */
+#uploaded-file-list::-webkit-scrollbar,
+#chat-session-list::-webkit-scrollbar { width: 10px; }
+#uploaded-file-list::-webkit-scrollbar-track,
+#chat-session-list::-webkit-scrollbar-track { background: transparent; }
+#uploaded-file-list::-webkit-scrollbar-thumb,
+#chat-session-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.04); border-radius: 8px; }
+#uploaded-file-list:hover::-webkit-scrollbar-thumb,
+#chat-session-list:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+
+/* Firefox styling for lists */
+#uploaded-file-list,
+#chat-session-list { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.04) transparent; }
+#uploaded-file-list:hover,
+#chat-session-list:hover { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+.system-message {
+  background-color: #3a3a3a;
+  color: #cccccc;
+  font-style: italic;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 8px 0;
+  max-width: 80%;
+  text-align: center;
+}
+
+/* === Download Link (PDF output) === */
+.download-link {
+  display: inline-block;
+  margin-top: 1rem;
+  color: #4aa3df;
+  font-weight: 500;
+  text-decoration: none;
+  border: 1px solid #4aa3df;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  transition: background-color 0.2s, color 0.2s;
+  align-self: flex-start;
+}
+
+/* === Toasts === */
+.toast-container {
+  position: fixed;
+  top: 16px;   /* top-right of the page */
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 5000;
+  pointer-events: none; /* allow clicks to fall through unless on a toast */
+}
+.toast {
+  background: #2d2d2d;
+  color: #eaeaea;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 240px;
+  max-width: 360px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 150ms ease, transform 150ms ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  pointer-events: auto;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.info { border-color: rgba(59,130,246,0.4); }
+.toast.success { border-color: rgba(34,197,94,0.4); }
+.toast.error { border-color: rgba(239,68,68,0.45); }
+
+.download-link:hover {
+  background-color: #4aa3df;
+  color: white;
+}
+
+/* === Spinner Animation === */
+.spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0.75rem auto;
+  gap: 0.3rem;
+}
+
+.spinner .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f6f9ff;
+  animation: bounce 1.2s infinite ease-in-out both;
+}
+
+.spinner .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.spinner .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/*--- Code--- */
+/* Dark code box styling */
+pre {
+  position: relative;
+  background: #1e1e1e;
+  color: #f5f5f5;
+  border-radius: 12px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 1em 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+pre, code {
+  white-space: pre-wrap;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  font-family: "Fira Code", monospace;
+  background: none;
+  color: inherit;
+  white-space: pre;
+  border-radius: 12px;
+  padding: 0;
+}
+
+/* Inline code (like `var x = 1;`) */
+code {
+  background: #2a2a2a;
+  color: #f5f5f5;
+  padding: 2px 5px;
+  border-radius: 6px;
+  font-family: "Fira Code", monospace;
+  font-size: 0.85em;
+}
+
+/* Scrollbar styling for overflowing code */
+pre::-webkit-scrollbar {
+  height: 8px;
+}
+pre::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+
+
+/* Copy button */
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: #2a2a2a;
+  color: #ccc;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+pre:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  background: #444;
+  color: #fff;
+}
+
