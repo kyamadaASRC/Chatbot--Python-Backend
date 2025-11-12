@@ -1,0 +1,12 @@
+{
+  "key": "agent_iwant_gpt",
+  "display_name": "Agent iWant",
+  "instruction_file": "instruction.txt",
+  "model_try": ["gpt-5", "gpt-4.1"],
+  "tools": [
+    {"type": "file_search"},
+    {"type": "web_search_preview"}
+  ],
+  "aliases": ["agent iwant", "iwant consultant"],
+  "keywords": ["psc", "naics", "market research"]
+}

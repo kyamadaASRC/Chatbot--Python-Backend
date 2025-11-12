@@ -13,6 +13,7 @@ DEFAULT_MODELS = ["gpt-5", "gpt-4.1"]
 BASE_DIR = Path(__file__).resolve().parent
 CONSULTANTS_ROOT = BASE_DIR / "consultants"
 VECTOR_CACHE_PATH = CONSULTANTS_ROOT / "vector_store_cache.json"
+OVERVIEW_PATH = CONSULTANTS_ROOT / "overview.md"
 DEFAULT_INSTRUCTION_TEXT = "You are the Agent_iWant_GPT assistant."
 
 
@@ -253,6 +254,16 @@ def list_consultants() -> List[Dict[str, Any]]:
             }
         )
     return items
+
+
+def get_consultant_overview() -> str:
+    """Return the contents of consultants/overview.md if present."""
+    if OVERVIEW_PATH.exists():
+        try:
+            return OVERVIEW_PATH.read_text(encoding="utf-8").strip()
+        except OSError:
+            pass
+    return ""
 
 
 def run_consultant_response(

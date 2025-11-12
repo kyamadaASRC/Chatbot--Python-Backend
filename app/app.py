@@ -12,6 +12,7 @@ from app.consultants import (
     DEFAULT_CONSULTANT_KEY,
     CONSULTANTS,
     list_consultants,
+    get_consultant_overview,
 )
 from app.openai_client import client
 
@@ -22,34 +23,11 @@ CONTAINERS = {}
 CONTAINER_FILES = {}
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
-GENERAL_CHAT_SYSTEM = (
-    "You are a helpful assistant. Reply conversationally and keep answers concise "
-    "unless the user asks for more detail."
-)
+GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
+When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown).
+Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
+Otherwise, reply normally in raw Markdown."""
 CONSULTANT_TOOL_PREFIX = "call_"
-CONSULTANT_KEYWORDS = {
-    "psc",
-    "naics",
-    "pws",
-    "sow",
-    "soo",
-    "requirements doc",
-    "requirement",
-    "acquisition",
-    "contract",
-    "market research",
-    "sources sought",
-    "ige",
-    "rs-ca",
-    "rs ca",
-    "dd254",
-    "fedramp",
-    "triage",
-    "agent iwant",
-    "consultant",
-    "ko",
-    "procurement",
-}
 
 
 
@@ -74,8 +52,14 @@ def create_app() -> Flask:
         msg = (message or "").lower()
         if "consultant" in msg:
             return True
-        matches = sum(1 for kw in CONSULTANT_KEYWORDS if kw in msg)
-        return matches >= 2
+        matches = 0
+        for meta in CONSULTANTS.values():
+            for keyword in meta.get("keywords", []):
+                if keyword and keyword in msg:
+                    matches += 1
+                    if matches >= 2:
+                        return True
+        return False
 
 
     def _match_consultant_alias(message: str) -> Optional[str]:
@@ -218,7 +202,10 @@ def create_app() -> Flask:
 
     @app.route("/v1/consultants", methods=["GET"])
     def list_consultants_route():
-        return jsonify(list_consultants())
+        return jsonify({
+            "consultants": list_consultants(),
+            "overview": get_consultant_overview(),
+        })
 
     @app.route("/v1/vector_stores", methods=["POST"])
     def create_vector_store():
