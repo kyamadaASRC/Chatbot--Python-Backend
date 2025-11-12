@@ -149,7 +149,17 @@
                 messageSend: "{{ url_for('static', filename='img/message-send.svg') }}",
                 messageStop: "{{ url_for('static', filename='img/message-stop.svg') }}"
             };
-            window.CHAT_MODEL = {{ config.get('CHAT_MODEL', 'gpt-5')|tojson }};
+        </script>
+        <script id="chat-model-data" type="application/json">
+            {{ config.get('CHAT_MODEL', 'gpt-5')|tojson }}
+        </script>
+        <script>
+            try {
+                const el = document.getElementById('chat-model-data');
+                window.CHAT_MODEL = el ? JSON.parse(el.textContent) : 'gpt-5';
+            } catch (e) {
+                window.CHAT_MODEL = 'gpt-5';
+            }
         </script>
         <!-- Main chatbot logic -->
         <script type="module" src="{{ url_for('static', filename='js/main.js') }}">

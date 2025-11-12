@@ -26,6 +26,7 @@ CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
 When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown).
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
+If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
 CONSULTANT_TOOL_PREFIX = "call_"
 
@@ -255,7 +256,7 @@ def create_app() -> Flask:
         try:
             uploaded = client.files.create(
                 file=(file.filename, file.stream, file.mimetype or "application/octet-stream"),
-                purpose=purpose,
+                purpose=purpose, # type: ignore
             )
             return jsonify(_serialize(uploaded))
         except Exception as exc:
@@ -278,7 +279,7 @@ def create_app() -> Flask:
             else:
                 data = content
             return send_file(
-                io.BytesIO(data),
+                io.BytesIO(data), # type: ignore
                 download_name=f"{file_id}.bin",
                 mimetype="application/octet-stream",
             )

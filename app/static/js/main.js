@@ -50,6 +50,7 @@ const systemPrompt = `You are a helpful assistant. You can use the tool 'generat
          Respond using Markdown syntax for code, but do not include additional Markdown fences inside other code blocks. 
          When outputting code, always wrap it in fenced Markdown code blocks (\`\`\`) so it renders as text, not executable HTML.
          Always leave a blank line before and after fenced code blocks.
+         If you cannot access the data, just say so and do not provide terminal commands.
          Otherwise, just reply normally in raw Markdown.`;
 
 

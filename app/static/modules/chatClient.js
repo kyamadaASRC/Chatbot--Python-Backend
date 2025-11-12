@@ -170,7 +170,8 @@ export class ChatClient {
       return "";
     };
 
-    const assistantMsg = data.text || data.response || "";
+    const assistantMsg = extractAssistantTextFromResponse(data) || data.text || "";
+
     this.sessionManager.addMessageToCurrent("user", prompt);
     if (assistantMsg) {
       this.sessionManager.addMessageToCurrent("assistant", assistantMsg);
