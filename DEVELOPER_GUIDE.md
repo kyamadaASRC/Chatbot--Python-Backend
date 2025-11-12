@@ -119,7 +119,7 @@ Data flow:
 | --- | --- |
 | `GET /` | Render chatbot UI (`chatbot.html`). |
 | `POST /chat` | Main entry point; auto consults specialists or general model. |
-| `GET /v1/consultants` | Returns consultant metadata and overview (`list_consultants()`, `get_consultant_overview()`). |
+| `GET /v1/consultants` | Returns consultant metadata plus the contents of `app/consultants/overview.md` so the UI can summarize available specialists. |
 | Vector stores (`POST/DELETE /v1/vector_stores*`) | Create/delete stores via OpenAI SDK. |
 | Files (`GET/POST/DELETE /v1/files*`) | Proxy OpenAI file APIs including content download. |
 | Containers (`POST/DELETE /v1/containers*` + `/files`) | Manage lightweight “code interpreter” storage on disk. |

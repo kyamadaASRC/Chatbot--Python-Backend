@@ -1,0 +1,12 @@
+{
+  "industry_feedback_gpt": {
+    "vector_store_id": "vs_6914dc7b84c08191a512d9a525022980",
+    "file_signature": [
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Industry_Feedback_GPT/instructions.txt",
+        "size": 5602,
+        "mtime_ns": 1762972658486454550
+      }
+    ]
+  }
+}
