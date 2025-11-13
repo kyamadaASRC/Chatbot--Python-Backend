@@ -178,7 +178,7 @@ Data flow:
 | `static/js/main.js` | Creates managers, wires DOM events, handles send/stop button state, manages scrolling, and processes tool calls like `generate_pdf`. |
 | `static/modules/chatSession.js` | Keeps per-session metadata, persists to `localStorage`, creates vector stores and containers via backend endpoints, and renames sessions using `/v1/responses` (`chatSession.js:75-226`, `chatSession.js:246-374`). |
 | `static/modules/chatClient.js` | Builds the payload for `/chat`, ensures vector store/container IDs exist, defines the `generate_pdf`, `web_search_preview`, and `code_interpreter` tools, and records returned messages (`chatClient.js:12-181`). |
-| `static/modules/fileManager.js` | Handles drag/drop + input uploads, pushes files to OpenAI, links them to the session’s vector store, mirrors them into containers for analysis, and deletes both OpenAI + container copies (`fileManager.js:1-210`). |
+| `static/modules/fileManager.js` | Handles drag/drop + input uploads, pushes files to OpenAI, links them to the session’s vector store, mirrors them into containers for analysis, ingests model-generated artifacts (e.g., PDFs from `generate_pdf`), and deletes both OpenAI + container copies (`fileManager.js`). |
 | `static/modules/ui.js` | Renders messages, session list items, spinners, and toast notifications with Markdown sanitization and syntax highlighting. |
 | `static/modules/utils.js` | Provides `fetchWithDiagnostics`, Markdown → PDF helpers, and sanitization utilities so tool calls can drop downloadable artifacts into the transcript. |
 
@@ -187,7 +187,7 @@ Data flow:
 1. User submits a prompt → `main.js` disables inputs, renders the user bubble, and calls `chatClient.sendMessage()`.
 2. `ChatClient` fetches `/chat` with the session’s `vector_store_id` + `container_id`.
 3. The backend either routes to a consultant or to the general assistant and returns JSON describing the response/tool stream.
-4. `main.js` renders the assistant text and inspects `output` for tool calls (e.g., `generate_pdf`), invoking utilities as needed.
+4. `main.js` renders the assistant text, inspects `output` for tool calls (e.g., `generate_pdf`), invokes utilities, and, when a PDF blob is returned, hands it to `FileManager` so it’s uploaded/linked automatically.
 5. `ChatSessionManager` updates local history and triggers auto title summarization through `/v1/responses`.
 
 ---
@@ -195,7 +195,9 @@ Data flow:
 ## 8. Files, Vector Stores, and Containers
 
 - **Vector stores** – Each session calls `POST /v1/vector_stores` on creation (`chatSession.js:75-99`) so file search has isolated context. Store IDs are cached on the session object and reused for future uploads.
-- **File uploads** – `FileManager.uploadFile()` sends files to `/v1/files` → OpenAI file storage, links them back via `/v1/vector_stores/{id}/files`, and keeps DOM metadata (`fileManager.js:29-154`). Vision files optionally trigger caption generation for better retrieval.
+- **File uploads** – `FileManager.uploadFile()` sends files to `/v1/files` → OpenAI file storage, links them back via `/v1/vector_stores/{id}/files`, and keeps DOM metadata (`fileManager.js`). Vision files optionally trigger caption generation for better retrieval.
+- **Generated artifacts** – When the Responses API returns `output_file_ids` (from consultants or the default assistant), the backend links them to the active session vector store and the frontend calls `fileManager.addGeneratedFiles()` so they appear in the Files list. PDF blobs created locally via `generate_pdf` are also ingested and uploaded automatically, with their preview/download links backed by the local object URL.
+- **Server-generated DOCX/XLSX** – Models can call the `generate_docx` and `generate_xlsx` function tools. The Flask backend uses `python-docx` and `openpyxl` to build the documents, uploads them to OpenAI Files, links them into the session’s vector store, and returns metadata so the Files sidebar updates immediately.
 - **Containers** – Long-running analysis (CSV, XLSX, etc.) optionally spins up a local container via `POST /v1/containers` and mirrors relevant files there so `code_interpreter` has read/write access (`chatSession.js:150-222`, `fileManager.js:155-210`).
 - **Cleanup** – Deleting a chat session should cascade through `ChatSessionManager.deleteVectorStore()` and `deleteContainer()`; deleting an individual file removes it from OpenAI plus the container, then purges DOM metadata (`fileManager.js:212-302`).
 

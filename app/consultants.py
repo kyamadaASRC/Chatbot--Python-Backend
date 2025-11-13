@@ -218,6 +218,22 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
     return registry
 
 
+def _response_to_dict(resp: Any) -> Dict[str, Any]:
+    if hasattr(resp, "model_dump"):
+        try:
+            return resp.model_dump()
+        except Exception:
+            pass
+    if hasattr(resp, "to_dict"):
+        try:
+            data = resp.to_dict()
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
+
+
 CONSULTANTS = _discover_consultants()
 if not CONSULTANTS:
     CONSULTANTS = {
@@ -313,6 +329,7 @@ def run_consultant_response(
                 ],
                 tools=request_tools or None,
             )
+            serialized = _response_to_dict(resp)
             text_out = getattr(resp, "output_text", "") or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
             print(f"[consultant:{consultant_key}] received response successfully.")
@@ -324,6 +341,7 @@ def run_consultant_response(
                 "display_name": meta.get("display_name", consultant_key),
                 "local_files": meta.get("local_files", []),
                 "vector_store_id": meta.get("vector_store_id"),
+                "response_payload": serialized,
             }
         except Exception as exc:  # pragma: no cover - diagnostic logging
             print(f"[consultant:{consultant_key}] model {model} call failed: {exc}")

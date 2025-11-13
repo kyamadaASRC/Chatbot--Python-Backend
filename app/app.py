@@ -1,11 +1,16 @@
 import io
 import os
 import uuid
+import json
+import re
+import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import shutil
+from docx import Document
+from openpyxl import Workbook
 
 from app.consultants import (
     run_consultant_response,
@@ -24,7 +29,8 @@ CONTAINER_FILES = {}
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
-When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown).
+When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown) or generate_docx(markdown_text=..., filename=...) depending on the requested format.
+For spreadsheets or tabular deliverables, call generate_xlsx(sheets=[{name:..., rows:[[...], ...]}]).
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
@@ -73,6 +79,153 @@ def _link_files_to_vector_store(
             }
         )
     return attached
+
+
+def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, Any]:
+    try:
+        meta = client.files.retrieve(file_id)
+        data = _serialize(meta)
+    except Exception:
+        data = {}
+    return {
+        "id": file_id,
+        "openai_file_id": file_id,
+        "name": data.get("filename") or data.get("display_name") or file_id,
+        "size": data.get("bytes"),
+        "vector_store_id": None,
+        "created_at": data.get("created_at"),
+        "source": source,
+    }
+
+
+def _sanitize_filename(name: Optional[str], suffix: str) -> str:
+    base = (name or "").strip() or f"assistant_output{suffix}"
+    if not base.lower().endswith(suffix):
+        base = f"{base}{suffix}"
+    safe = re.sub(r"[^\w.\-]+", "_", base)
+    if not safe:
+        safe = f"assistant_output{suffix}"
+    return safe
+
+
+def _upload_generated_file(path: Path, filename: str, mimetype: str = "application/octet-stream") -> Optional[str]:
+    try:
+        with path.open("rb") as handle:
+            uploaded = client.files.create(
+                file=(filename, handle, mimetype),
+                purpose="assistants",
+            )
+        return _extract_id(uploaded)
+    finally:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _markdown_to_docx(document: Document, markdown_text: str) -> None:
+    for raw_line in (markdown_text or "").splitlines():
+        line = raw_line.rstrip()
+        stripped = line.lstrip()
+        if not stripped:
+            document.add_paragraph("")
+            continue
+        if stripped.startswith("### "):
+            document.add_heading(stripped[4:], level=3)
+        elif stripped.startswith("## "):
+            document.add_heading(stripped[3:], level=2)
+        elif stripped.startswith("# "):
+            document.add_heading(stripped[2:], level=1)
+        elif re.match(r"^\d+\.\s", stripped):
+            document.add_paragraph(stripped, style="List Number")
+        elif stripped.startswith(("- ", "* ")):
+            document.add_paragraph(stripped[2:], style="List Bullet")
+        else:
+            document.add_paragraph(line)
+
+
+def _handle_generate_docx_tool(args: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    markdown_text = args.get("markdown_text")
+    if not markdown_text:
+        return []
+    filename = _sanitize_filename(args.get("filename"), ".docx")
+    document = Document()
+    _markdown_to_docx(document, markdown_text)
+    temp_path = Path(tempfile.mkstemp(suffix=".docx")[1])
+    document.save(temp_path)
+    file_id = _upload_generated_file(temp_path, filename, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    if not file_id:
+        return []
+    if vector_store_id:
+        linked = _link_files_to_vector_store([file_id], vector_store_id)
+        if linked:
+            return linked
+    return [_fetch_file_metadata(file_id)]
+
+
+def _handle_generate_xlsx_tool(args: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    sheets = args.get("sheets")
+    rows = args.get("rows")
+    if not sheets and rows:
+        sheets = [{"name": "Sheet1", "rows": rows}]
+    if not isinstance(sheets, list) or not sheets:
+        return []
+    filename = _sanitize_filename(args.get("filename"), ".xlsx")
+    wb = Workbook()
+    first_sheet = True
+    for sheet_def in sheets:
+        if not isinstance(sheet_def, dict):
+            continue
+        title = (sheet_def.get("name") or "Sheet").strip() or "Sheet"
+        sheet_rows = sheet_def.get("rows") or []
+        ws = wb.active if first_sheet else wb.create_sheet()
+        first_sheet = False
+        ws.title = title[:31]
+        for row in sheet_rows:
+            if isinstance(row, list):
+                ws.append(row)
+            else:
+                ws.append([row])
+    temp_path = Path(tempfile.mkstemp(suffix=".xlsx")[1])
+    wb.save(temp_path)
+    file_id = _upload_generated_file(temp_path, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if not file_id:
+        return []
+    if vector_store_id:
+        linked = _link_files_to_vector_store([file_id], vector_store_id)
+        if linked:
+            return linked
+    return [_fetch_file_metadata(file_id)]
+
+
+def _coerce_tool_args(entry: Dict[str, Any]) -> Dict[str, Any]:
+    args = entry.get("arguments") or entry.get("function", {}).get("arguments") or {}
+    if isinstance(args, str):
+        try:
+            return json.loads(args)
+        except json.JSONDecodeError:
+            return {}
+    if isinstance(args, dict):
+        return args
+    return {}
+
+
+def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    generated: List[Dict[str, Any]] = []
+    outputs = data.get("output") or []
+    for entry in outputs:
+        entry_type = entry.get("type")
+        if entry_type not in ("function_call", "output_tool_call"):
+            continue
+        name = entry.get("name") or entry.get("function", {}).get("name")
+        if not name:
+            continue
+        args = _coerce_tool_args(entry)
+        if name == "generate_docx":
+            generated.extend(_handle_generate_docx_tool(args, vector_store_id))
+        elif name == "generate_xlsx":
+            generated.extend(_handle_generate_xlsx_tool(args, vector_store_id))
+    return generated
 
 
 def create_app() -> Flask:
@@ -164,7 +317,9 @@ def create_app() -> Flask:
         if not text:
             text = "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
-        generated_files = _link_files_to_vector_store(file_ids, vector_store_id)
+        response_payload = result.get("response_payload") or {}
+        generated_files = _process_server_tool_calls(response_payload, vector_store_id)
+        generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
         meta = CONSULTANTS.get(consultant_key, {})
         tool_args = {
             "question": message,
@@ -258,7 +413,9 @@ def create_app() -> Flask:
             serialized = _serialize(resp)
             text = _extract_text(resp) or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
-            generated_files = _link_files_to_vector_store(file_ids, vector_store_id)
+            generated_files = []
+            generated_files.extend(_process_server_tool_calls(serialized, vector_store_id))
+            generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
             return jsonify({
                 "text": text,
                 "mode": "direct",
