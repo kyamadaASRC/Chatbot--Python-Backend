@@ -2,7 +2,7 @@ import io
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 import shutil
@@ -38,6 +38,41 @@ def _serialize(obj):
     if hasattr(obj, "to_dict"):
         return obj.to_dict()
     return obj
+
+
+def _link_files_to_vector_store(
+    file_ids: Optional[List[str]],
+    vector_store_id: Optional[str],
+) -> List[Dict[str, Any]]:
+    attached: List[Dict[str, Any]] = []
+    if not vector_store_id or not file_ids:
+        return attached
+
+    for file_id in file_ids:
+        if not file_id:
+            continue
+        try:
+            client.vector_stores.files.create(vector_store_id=vector_store_id, file_id=file_id)
+        except Exception as exc:
+            print(f"[vector-store] Failed to link file {file_id} to {vector_store_id}: {exc}")
+        file_meta: Dict[str, Any] = {}
+        try:
+            meta = client.files.retrieve(file_id)
+            file_meta = _serialize(meta) if meta else {}
+        except Exception as exc:
+            print(f"[files] Failed to retrieve metadata for {file_id}: {exc}")
+        attached.append(
+            {
+                "id": file_id,
+                "openai_file_id": file_id,
+                "name": file_meta.get("filename") or file_meta.get("display_name") or file_meta.get("id") or file_id,
+                "size": file_meta.get("bytes"),
+                "vector_store_id": vector_store_id,
+                "created_at": file_meta.get("created_at"),
+                "source": "generated",
+            }
+        )
+    return attached
 
 
 def create_app() -> Flask:
@@ -129,6 +164,7 @@ def create_app() -> Flask:
         if not text:
             text = "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
+        generated_files = _link_files_to_vector_store(file_ids, vector_store_id)
         meta = CONSULTANTS.get(consultant_key, {})
         tool_args = {
             "question": message,
@@ -156,6 +192,7 @@ def create_app() -> Flask:
             "consultant_display": result.get("display_name") or meta.get("display_name"),
             "model": result.get("model"),
             "file_ids": file_ids,
+            "generated_files": generated_files,
             "resources": meta.get("local_files", []),
             "output": [call_stub, response_stub],
         }
@@ -168,6 +205,7 @@ def create_app() -> Flask:
         vector_store_id = data.get("vector_store_id")
         container_id = data.get("container_id")
         requested_consultant = data.get("consultant_key")
+        incoming_tools = data.get("tools")
         if not msg:
             return jsonify({"error": "Missing message"}), 400
 
@@ -189,15 +227,47 @@ def create_app() -> Flask:
                 return jsonify({"error": str(exc)}), 500
 
         try:
+            tools: List[Dict[str, Any]] = []
+            if isinstance(incoming_tools, list):
+                for tool in incoming_tools:
+                    if not isinstance(tool, dict):
+                        continue
+                    sanitized = dict(tool)
+                    if sanitized.get("type") == "code_interpreter":
+                        container_val = sanitized.get("container")
+                        if not (isinstance(container_val, str) and container_val.startswith("cntr")):
+                            continue
+                    tools.append(sanitized)
+
+            if vector_store_id:
+                has_file_search = any(
+                    isinstance(tool, dict) and tool.get("type") == "file_search"
+                    for tool in tools
+                )
+                if not has_file_search:
+                    tools.insert(0, {"type": "file_search", "vector_store_ids": [vector_store_id]})
+
             resp = client.responses.create(
                 model=CHAT_MODEL,
                 input=[
                     {"role": "system", "content": GENERAL_CHAT_SYSTEM},
                     {"role": "user", "content": msg},
                 ],
+                tools=tools or None,
             )
-            text = _extract_text(resp) or "I wasn't able to produce a response."
-            return jsonify({"text": text, "mode": "direct"})
+            serialized = _serialize(resp)
+            text = _extract_text(resp) or ""
+            file_ids = getattr(resp, "output_file_ids", None) or []
+            generated_files = _link_files_to_vector_store(file_ids, vector_store_id)
+            return jsonify({
+                "text": text,
+                "mode": "direct",
+                "file_ids": file_ids,
+                "generated_files": generated_files,
+                "output": serialized.get("output"),
+                "output_text": serialized.get("output_text"),
+                "choices": serialized.get("choices"),
+            })
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 

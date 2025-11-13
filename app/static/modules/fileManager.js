@@ -1,6 +1,6 @@
 // modules/fileManager.js
 import { fetchWithDiagnostics } from "./utils.js";
-import { showToast, dismissToast } from "./ui.js";
+import { showToast, dismissToast, renderFileList } from "./ui.js";
 
 const LOCAL_API_BASE = window.LOCAL_API_BASE || "http://localhost:5001";
 const apiUrl = (path = "") => `${LOCAL_API_BASE}${path}`;
@@ -56,6 +56,77 @@ export class FileManager {
     return await res.json().catch(() => ({}));
   }
 
+  addGeneratedFiles(records = []) {
+    if (!Array.isArray(records) || !records.length) return;
+    const current = getCurrentSessionFiles();
+    const byId = new Map();
+    current.forEach((rec) => {
+      const key = rec.openai_file_id || rec.id;
+      if (key) byId.set(key, rec);
+    });
+    let changed = false;
+    for (const record of records) {
+      const normalized = normalizeFileRecord(record, { source: record?.source || "generated" });
+      if (!normalized) continue;
+      const key = normalized.openai_file_id || normalized.id;
+      if (!key) continue;
+      const existing = byId.get(key);
+      byId.set(key, existing ? { ...existing, ...normalized } : normalized);
+      changed = true;
+    }
+    if (!changed) return;
+    const updated = Array.from(byId.values());
+    saveCurrentSessionFiles(updated);
+  }
+
+  async ingestGeneratedFile(blob, filename = "assistant_output.pdf", previewUrl = null, source = "generated") {
+    if (!blob) return null;
+    const sessionId = window.current_session_id;
+    if (!sessionId) {
+      showToast("No active session to store generated files.", "error", 2500);
+      return null;
+    }
+    const vectorId =
+      window.current_vector_store_id ||
+      window.sessionManager?.getVectorStoreId?.();
+    const file = new File([blob], filename, { type: blob.type || "application/pdf" });
+    const toast = showToast(`Saving ${filename}…`, "info", 0);
+    try {
+      const uploaded = await this.uploadFile(file, "assistants");
+      if (vectorId) {
+        try {
+          await this.linkFileToVectorStore(uploaded.id, vectorId);
+        } catch (err) {
+          console.warn("Failed to link generated file to vector store:", err);
+        }
+      }
+      const record = normalizeFileRecord({
+        id: uploaded?.id,
+        openai_file_id: uploaded?.id,
+        name: filename,
+        size: file.size,
+        vector_store_id: vectorId || null,
+        mime: file.type,
+        source,
+        preview_url: previewUrl || null,
+        created_at: uploaded?.created_at || Date.now(),
+      });
+      if (record) {
+        const current = getCurrentSessionFiles();
+        current.push(record);
+        saveCurrentSessionFiles(current);
+      }
+      dismissToast(toast);
+      showToast(`Saved ${filename}`, "success", 1800);
+      return record;
+    } catch (err) {
+      dismissToast(toast);
+      console.error("Failed to save generated file:", err);
+      showToast("Failed to save generated file", "error", 3000);
+      return null;
+    }
+  }
+
 }
 
 
@@ -74,6 +145,75 @@ function expandFilesSection() {
     if (toggleBtn) toggleBtn.setAttribute("aria-expanded", "true");
   } catch {}
 }
+
+function getCurrentSessionFiles() {
+  const sessionEl = document.querySelector(`.chat-session-item[sessionID="${window.current_session_id}"]`);
+  if (sessionEl) {
+    try {
+      return JSON.parse(sessionEl.getAttribute("file_ids") || "[]") || [];
+    } catch {
+      return [];
+    }
+  }
+  const session = window.sessionManager?.getCurrentSession?.();
+  return Array.isArray(session?.files) ? [...session.files] : [];
+}
+
+function saveCurrentSessionFiles(files = []) {
+  const normalized = Array.isArray(files) ? files : [];
+  const sessionEl = document.querySelector(`.chat-session-item[sessionID="${window.current_session_id}"]`);
+  if (sessionEl) {
+    sessionEl.setAttribute("file_ids", JSON.stringify(normalized));
+  }
+  const session = window.sessionManager?.getCurrentSession?.();
+  if (session) {
+    session.files = normalized;
+    window.sessionManager.saveSessionsToLocal?.();
+  }
+  renderFileList(normalized);
+  expandFilesSection();
+}
+
+function normalizeFileRecord(record = {}, defaults = {}) {
+  const data = { ...defaults, ...record };
+  const id = data.openai_file_id || data.id;
+  if (!id) return null;
+  return {
+    id,
+    openai_file_id: id,
+    name: data.name || data.filename || id,
+    size: data.size ?? data.bytes ?? null,
+    vector_store_id: data.vector_store_id || null,
+    container_file_id: data.container_file_id || null,
+    preview_url: data.preview_url || null,
+    mime: data.mime || data.mimetype || "",
+    source: data.source || "upload",
+    created_at: data.created_at || null,
+  };
+}
+
+function closeAllFileMenus(except = null) {
+  document.querySelectorAll(".file-menu-wrapper.open").forEach((wrapper) => {
+    if (wrapper === except) return;
+    wrapper.classList.remove("open");
+    const menu = wrapper.querySelector(".file-menu");
+    if (menu) {
+      menu.hidden = true;
+      menu.style.position = "";
+      menu.style.top = "";
+      menu.style.left = "";
+      menu.style.width = "";
+      menu.style.visibility = "";
+    }
+  });
+}
+
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest(".file-menu-wrapper")) return;
+  closeAllFileMenus();
+});
+
+window.addEventListener("scroll", () => closeAllFileMenus(), { capture: true, passive: true });
 
 // Button opens hidden input
 fileUploadBtn?.addEventListener("click", () => {
@@ -94,24 +234,14 @@ fileUploadInput?.addEventListener("change", async (e) => {
   expandFilesSection();
 
   for (const file of files) {
-    // --- UI setup ---
-    const listItem = document.createElement("div");
-    listItem.className = "uploaded-file-item";
-    listItem.innerHTML = `
-      <span title="${file.name}">${file.name}</span>
-      <button class="delete-file-btn" title="Delete file">×</button>
-    `;
-    listItem.dataset.name = file.name;
-    listItem.dataset.mime = file.type || "";
-    try {
-      listItem.dataset.previewUrl = URL.createObjectURL(file);
-    } catch {}
-    uploadedFileList?.appendChild(listItem);
-
     // --- Initialize tracking variables ---
     let toastUploading;
     let linkRes = null;
     let uploadedContainerFile = null;
+    let previewUrl = null;
+    try {
+      previewUrl = URL.createObjectURL(file);
+    } catch {}
 
     try {
       // 1️⃣ Upload to OpenAI Files
@@ -123,7 +253,6 @@ fileUploadInput?.addEventListener("change", async (e) => {
       const purpose = isImage ? "vision" : "assistants";
 
       const uploaded = await window.fileManager.uploadFile(file, purpose);
-      listItem.dataset.fileId = uploaded.id;
       dismissToast(toastUploading);
       showToast(`Uploaded ${file.name}`, "success", 1500);
       console.log("[Upload] File uploaded:", uploaded.id);
@@ -199,23 +328,20 @@ fileUploadInput?.addEventListener("change", async (e) => {
       }
 
       // 5️⃣ Record in session
-      const sessionEl = document.querySelector(
-        `.chat-session-item[sessionID="${sessionId}"]`
-      );
-      if (sessionEl) {
-        const fileRecord =
-          JSON.parse(sessionEl.getAttribute("file_ids") || "[]") || [];
-        fileRecord.push({
-          id: uploaded.id,
-          name: file.name,
-          size: file.size,
-          openai_file_id: uploaded.id,
-          vector_store_id: vectorId || window.current_vector_store_id || null,
-          container_file_id: uploadedContainerFile?.id || null,
-        });
-        sessionEl.setAttribute("file_ids", JSON.stringify(fileRecord));
-        console.log("[Upload] Session file_ids updated:", fileRecord);
-      }
+      const fileRecordList = getCurrentSessionFiles();
+      fileRecordList.push({
+        id: uploaded.id,
+        name: file.name,
+        size: file.size,
+        openai_file_id: uploaded.id,
+        vector_store_id: vectorId || window.current_vector_store_id || null,
+        container_file_id: uploadedContainerFile?.id || null,
+        preview_url: previewUrl,
+        mime: file.type || "",
+      });
+      saveCurrentSessionFiles(fileRecordList);
+      renderFileList(fileRecordList);
+      console.log("[Upload] Session file_ids updated:", fileRecordList);
 
       // 6️⃣ Optional: caption image and store in vector store
       if (isImage) {
@@ -240,19 +366,20 @@ fileUploadInput?.addEventListener("change", async (e) => {
                 vectorId2
               );
               console.log("[Vision] Caption file linked:", capUpload.id);
-              const sessionEl2 = document.querySelector(
-                `.chat-session-item[sessionID="${sessionId}"]`
-              );
-              if (sessionEl2) {
-                const arr = JSON.parse(
-                  sessionEl2.getAttribute("file_ids") || "[]"
-                );
-                arr.push({
-                  id: capUpload.id,
-                  name: `${file.name}.caption.txt`,
-                  size: caption.length,
-                });
-                sessionEl2.setAttribute("file_ids", JSON.stringify(arr));
+              const captionRecord = normalizeFileRecord({
+                id: capUpload.id,
+                openai_file_id: capUpload.id,
+                name: `${file.name}.caption.txt`,
+                size: caption.length,
+                vector_store_id: vectorId2,
+                mime: "text/plain",
+                source: "generated",
+              });
+              if (captionRecord) {
+                const arr = getCurrentSessionFiles();
+                arr.push(captionRecord);
+                saveCurrentSessionFiles(arr);
+                renderFileList(arr);
               }
               dismissToast(capToast);
               showToast(`Caption created for ${file.name}`, "success", 1800);
@@ -268,7 +395,9 @@ fileUploadInput?.addEventListener("change", async (e) => {
       console.error("[Upload] Error:", err);
       if (toastUploading) dismissToast(toastUploading);
       showToast(`Upload failed: ${file.name}`, "error", 3500);
-      listItem.remove();
+      if (previewUrl) {
+        try { URL.revokeObjectURL(previewUrl); } catch {}
+      }
     }
   }
 
@@ -276,13 +405,50 @@ fileUploadInput?.addEventListener("change", async (e) => {
   e.target.value = "";
 });
 
-// Delete and preview handler
+// Delete, rename, download, and preview handler
 uploadedFileList?.addEventListener("click", async (e) => {
+  const menuBtn = e.target.closest(".file-menu-btn");
+  if (menuBtn) {
+    const wrapper = menuBtn.closest(".file-menu-wrapper");
+    if (!wrapper) return;
+    const isOpen = wrapper.classList.contains("open");
+    closeAllFileMenus();
+    if (!isOpen) {
+      wrapper.classList.add("open");
+      const menu = wrapper.querySelector(".file-menu");
+      if (menu) {
+        menu.hidden = false;
+        menu.style.position = "fixed";
+        menu.style.right = "auto";
+        menu.style.left = "0px";
+        menu.style.top = "0px";
+        const prevVisibility = menu.style.visibility;
+        menu.style.visibility = "hidden";
+        const btnRect = menuBtn.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const vw = window.innerWidth || document.documentElement.clientWidth;
+        const vh = window.innerHeight || document.documentElement.clientHeight;
+        let top = btnRect.bottom;
+        let left = Math.min(vw - 8 - menuRect.width, Math.max(8, btnRect.right - menuRect.width));
+        if (top + menuRect.height > vh) {
+          top = Math.max(8, btnRect.top - menuRect.height);
+        }
+        menu.style.top = `${top}px`;
+        menu.style.left = `${left}px`;
+        menu.style.width = `${menuRect.width}px`;
+        menu.style.visibility = prevVisibility || "visible";
+      }
+    }
+    return;
+  }
+
+  const renameBtn = e.target.closest(".file-rename");
+  const deleteBtn = e.target.closest(".file-delete") || e.target.classList.contains("delete-file-btn");
+  const downloadBtn = e.target.closest(".file-download");
   const item = e.target.closest(".uploaded-file-item");
   if (!item) return;
 
   const fileId = item.dataset.fileId;
-  console.log(`This is fileId: ${fileId}`) //Debug
   if (!fileId) return;
 
   const session = window.sessionManager?.getCurrentSession?.(); 
@@ -306,13 +472,80 @@ uploadedFileList?.addEventListener("click", async (e) => {
       );
     }
   }
-  console.log(`This is fileRecord: ${fileRecord}`) //Debug
-  const containerFileId = fileRecord?.container_file_id
-  console.log(`This is containerFileId: ${containerFileId}`) //Debug
+  const containerFileId = fileRecord?.container_file_id;
 
+  if (renameBtn) {
+    const currentName = item.dataset.name || fileRecord?.name || "Attachment";
+    const newName = prompt("Rename file", currentName);
+    if (newName && newName.trim()) {
+      const trimmed = newName.trim();
+      item.dataset.name = trimmed;
+      const span = item.querySelector(".file-name");
+      if (span) {
+        span.textContent = trimmed;
+        span.title = trimmed;
+      }
+      if (fileRecord) {
+        fileRecord.name = trimmed;
+      }
+      const files = getCurrentSessionFiles().map((f) => {
+        if ((f.openai_file_id || f.id) === fileId) {
+          return { ...f, name: trimmed };
+        }
+        return f;
+      });
+      saveCurrentSessionFiles(files);
+      renderFileList(files);
+    }
+    closeAllFileMenus();
+    return;
+  }
+
+  if (downloadBtn) {
+    closeAllFileMenus();
+    const previewUrl = item.dataset.previewUrl;
+    const name = item.dataset.name || fileRecord?.name || fileId;
+    if (previewUrl) {
+      try {
+        const resp = await fetch(previewUrl);
+        if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.warn("Download failed:", err);
+        showToast("⚠️ Download failed", "error", 2500);
+      }
+      return;
+    }
+    // Fallback: server proxy
+    try {
+      const res = await fetch(apiUrl(`/v1/files/${fileId}/content`));
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Download failed:", err);
+      showToast("⚠️ Download failed", "error", 2500);
+    }
+    return;
+  }
 
   // Delete button
-  if (e.target.classList.contains("delete-file-btn")) {
+  if (deleteBtn) {
      try {
         showToast("🗑️ Deleting file...", "info", 1000);
 
@@ -348,22 +581,19 @@ uploadedFileList?.addEventListener("click", async (e) => {
         console.warn("❌ Failed to delete remote file:", err);
         showToast("⚠️ Failed to delete file", "error", 2500);
     }
-    try {
-      const sessionEl = document.querySelector(`.chat-session-item[sessionID="${window.current_session_id}"]`);
-      if (sessionEl) {
-        const arr = JSON.parse(sessionEl.getAttribute('file_ids') || '[]').filter(f => f.id !== fileId);
-        sessionEl.setAttribute('file_ids', JSON.stringify(arr));
-        console.log("[Upload] Session file_ids after deletion:", arr);
-      }
-    } catch {}
+    const updatedFiles = getCurrentSessionFiles().filter(
+      (f) => f.openai_file_id !== fileId && f.id !== fileId
+    );
+    saveCurrentSessionFiles(updatedFiles);
+    renderFileList(updatedFiles);
+    closeAllFileMenus();
     // Revoke blob URL if present
     try { if (item.dataset.previewUrl) URL.revokeObjectURL(item.dataset.previewUrl); } catch {}
-    item.remove();
     return;
   }
 
   // Filename click → preview
-  if (e.target.tagName && e.target.tagName.toLowerCase() === 'span') {
+  if (e.target.classList.contains("file-name")) {
     const name = item.dataset.name || e.target.textContent || 'File Preview';
     if (item.dataset.previewUrl) {
       // Use local blob URL when available (client-only preview)

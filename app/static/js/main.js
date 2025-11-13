@@ -169,7 +169,18 @@ async function handleToolCallsIfAny(data) {
             // If you already have a helper, import and call it here. For now,
             // just route to chatClient or a shared util if that's your setup.
             const { renderMarkdownPDFDownload } = await import("../modules/utils.js");
-            await renderMarkdownPDFDownload(md);
+            const pdfResult = await renderMarkdownPDFDownload(md);
+            if (pdfResult?.blob && window.fileManager?.ingestGeneratedFile) {
+              try {
+                await window.fileManager.ingestGeneratedFile(
+                  pdfResult.blob,
+                  pdfResult.filename || "assistant_output.pdf",
+                  pdfResult.url || null
+                );
+              } catch (err) {
+                console.warn("Failed to ingest generated PDF:", err);
+              }
+            }
           }
         } catch (err) {
           console.error("PDF tool call failed:", err);
@@ -518,10 +529,24 @@ scrollDownBtn?.addEventListener("click", () => {
       systemPrompt
     );
 
+    if (
+      window.fileManager?.addGeneratedFiles &&
+      Array.isArray(response?.generated_files) &&
+      response.generated_files.length
+    ) {
+      try {
+        window.fileManager.addGeneratedFiles(response.generated_files);
+      } catch (err) {
+        console.warn("Failed to record generated files:", err);
+      }
+    }
+
     removeSpinner(spinner);
     const output = extractAssistantText(response) || "";
     const toolMd = extractMarkdownFromToolCall(response) || "";
     const finalText = output && output.trim() ? output : (toolMd && toolMd.trim() ? toolMd : "Generated a PDF (see link below).");
+    sessionManager.addMessageToCurrent("user", text);
+    sessionManager.addMessageToCurrent("assistant", finalText);
     renderAssistantMessage(finalText);
     await handleToolCallsIfAny(response);
     await sessionManager.updateSessionSummarySafe(text, finalText);

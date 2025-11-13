@@ -152,6 +152,21 @@
                 transform var(--sidebar-transition);
 }
 
+.file-entry-main {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    gap: 6px;
+}
+
+.file-menu-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative;
+    margin-left: auto;
+}
+
 /* make filename shrink properly and truncate with ellipsis */
 .uploaded-file-item span {
   flex: 1;
@@ -265,7 +280,8 @@
     align-items: center; 
 }
 
-.session-menu-btn {
+.session-menu-btn,
+.file-menu-btn {
     background: none;
     border: none;
     color: #525252;
@@ -277,13 +293,15 @@
                 color var(--fast-transition);
 }
 
-.session-menu-btn:hover { 
+.session-menu-btn:hover,
+.file-menu-btn:hover { 
     background-color: rgba(255,255,255,0.1); 
     color: #e6eef8; 
 }
 
 /* The dropdown menu */
-.session-menu { 
+.session-menu,
+.file-menu { 
     position:absolute; 
     right:0; left:auto; 
     top:100%; 
@@ -300,11 +318,13 @@
 }
 
 /* Ensure the immediate wrapper doesn't clip the absolute-positioned menu */
-.session-menu-wrapper { 
+.session-menu-wrapper,
+.file-menu-wrapper { 
     overflow: visible; 
 }
 
-.session-menu button {
+.session-menu button,
+.file-menu button {
     background: none;
     border: none;
     color: #e6eef8;
@@ -316,7 +336,8 @@
     transition: background-color var(--fast-transition);
 }
 
-.session-menu button:hover { 
+.session-menu button:hover,
+.file-menu button:hover { 
     background-color: rgba(255,255,255,0.1); 
 }
 
@@ -348,6 +369,8 @@
 #sidebar.collapsed .chat-session-item,
 #sidebar.collapsed .session-menu,
 #sidebar.collapsed .session-menu-btn,
+#sidebar.collapsed .file-menu,
+#sidebar.collapsed .file-menu-btn,
 #sidebar.collapsed .chevron,
 #sidebar.collapsed .section-title,
 #sidebar.collapsed .button-text {
@@ -421,6 +444,8 @@
 #sidebar .section-chat-toggle,
 #sidebar .session-menu,
 #sidebar .session-menu-btn,
+#sidebar .file-menu,
+#sidebar .file-menu-btn,
 #sidebar .chevron,
 #sidebar .section-title,
 #sidebar .button-text,

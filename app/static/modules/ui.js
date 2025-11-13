@@ -209,13 +209,41 @@ export function renderFileList(files = []) {
   if (!list) return;
   list.innerHTML = "";
 
-  files.forEach(file => {
+  const sanitize = (value) => (typeof value === "string" ? value : "");
+
+  files.forEach((file) => {
+    if (!file) return;
+    const fileId = file.openai_file_id || file.id || "";
+    const displayName = sanitize(file.name) || fileId || "Attachment";
     const div = document.createElement("div");
     div.className = "uploaded-file-item";
+    if (fileId) div.dataset.fileId = fileId;
+    div.dataset.name = displayName;
+    if (file.vector_store_id) div.dataset.vectorStoreId = file.vector_store_id;
+    if (file.container_file_id) div.dataset.containerFileId = file.container_file_id;
+    if (file.mime || file.mimetype) div.dataset.mime = file.mime || file.mimetype;
+    if (file.preview_url || file.previewUrl) {
+      div.dataset.previewUrl = file.preview_url || file.previewUrl;
+    } else if (fileId) {
+      div.dataset.previewUrl = `/v1/files/${fileId}/content`;
+    }
+
     div.innerHTML = `
-      <span>${file.name}</span>
-      <button class="delete-file-btn" title="Delete file">×</button>
+      <div class="file-entry-main">
+        <span class="file-name" title="${displayName}">${displayName}</span>
+      </div>
+      <div class="file-menu-wrapper" style="margin-left:auto; position:relative;">
+        <button class="file-menu-btn" type="button" title="File options" aria-expanded="false">
+          <i class="bi bi-three-dots"></i>
+        </button>
+        <div class="file-menu" hidden>
+          <button class="file-rename" type="button">Rename</button>
+          <button class="file-download" type="button">Download</button>
+          <button class="file-delete" type="button">Delete</button>
+        </div>
+      </div>
     `;
+
     list.appendChild(div);
   });
 }

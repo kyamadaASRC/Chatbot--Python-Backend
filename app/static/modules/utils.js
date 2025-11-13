@@ -189,7 +189,7 @@ export async function renderMarkdownPDFDownload(markdown, containerSelector = "#
     } catch {}
   }
 
-  return pdfURL;
+  return { url: pdfURL, blob: pdfBlob, filename };
 }
 
 // Utility for Safe Markdown Conversion (escape/clean text)

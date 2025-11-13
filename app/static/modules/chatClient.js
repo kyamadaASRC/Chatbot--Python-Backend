@@ -95,19 +95,13 @@ export class ChatClient {
       },
     });
 
-    tools.push({type: "web_search_preview"});
-    if (containerId) {
-        tools.push({
-            type: "code_interpreter", 
-            container: containerId,
-        });
-    } else {
-        // fallback: auto runtime
-        tools.push({
-            type: "code_interpreter",
-            container: "auto",
-        });
-    };
+    tools.push({ type: "web_search_preview" });
+    if (containerId && /^cntr/.test(containerId)) {
+      tools.push({
+        type: "code_interpreter",
+        container: containerId,
+      });
+    }
 
     const payload = {
       model: this.model,
@@ -130,6 +124,7 @@ export class ChatClient {
         message: prompt,
         vector_store_id: vectorStoreId || null,
         container_id: containerId || null,
+        tools,
       }),
       signal,
     });
@@ -171,11 +166,7 @@ export class ChatClient {
     };
 
     const assistantMsg = extractAssistantTextFromResponse(data) || data.text || "";
-
-    this.sessionManager.addMessageToCurrent("user", prompt);
-    if (assistantMsg) {
-      this.sessionManager.addMessageToCurrent("assistant", assistantMsg);
-    }
+    data._assistant_message = assistantMsg;
 
     // Tool-call handling is centralized in main.js to avoid duplicates.
     return data;
