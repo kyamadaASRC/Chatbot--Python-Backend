@@ -46,6 +46,13 @@ def _serialize(obj):
     return obj
 
 
+def _ensure_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    serialized = _serialize(value)
+    return serialized if isinstance(serialized, dict) else {}
+
+
 def _link_files_to_vector_store(
     file_ids: Optional[List[str]],
     vector_store_id: Optional[str],
@@ -64,7 +71,7 @@ def _link_files_to_vector_store(
         file_meta: Dict[str, Any] = {}
         try:
             meta = client.files.retrieve(file_id)
-            file_meta = _serialize(meta) if meta else {}
+            file_meta = _ensure_dict(meta)
         except Exception as exc:
             print(f"[files] Failed to retrieve metadata for {file_id}: {exc}")
         attached.append(
@@ -84,7 +91,7 @@ def _link_files_to_vector_store(
 def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, Any]:
     try:
         meta = client.files.retrieve(file_id)
-        data = _serialize(meta)
+        data = _ensure_dict(meta)
     except Exception:
         data = {}
     return {
@@ -108,6 +115,13 @@ def _sanitize_filename(name: Optional[str], suffix: str) -> str:
     return safe
 
 
+def _make_temp_path(suffix: str) -> Path:
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    temp_path = Path(temp.name)
+    temp.close()
+    return temp_path
+
+
 def _upload_generated_file(path: Path, filename: str, mimetype: str = "application/octet-stream") -> Optional[str]:
     try:
         with path.open("rb") as handle:
@@ -115,7 +129,7 @@ def _upload_generated_file(path: Path, filename: str, mimetype: str = "applicati
                 file=(filename, handle, mimetype),
                 purpose="assistants",
             )
-        return _extract_id(uploaded)
+        return _extract_id(uploaded) # type: ignore
     finally:
         try:
             path.unlink(missing_ok=True)
@@ -123,7 +137,7 @@ def _upload_generated_file(path: Path, filename: str, mimetype: str = "applicati
             pass
 
 
-def _markdown_to_docx(document: Document, markdown_text: str) -> None:
+def _markdown_to_docx(document: Document, markdown_text: str) -> None: # type: ignore
     for raw_line in (markdown_text or "").splitlines():
         line = raw_line.rstrip()
         stripped = line.lstrip()
@@ -151,8 +165,8 @@ def _handle_generate_docx_tool(args: Dict[str, Any], vector_store_id: Optional[s
     filename = _sanitize_filename(args.get("filename"), ".docx")
     document = Document()
     _markdown_to_docx(document, markdown_text)
-    temp_path = Path(tempfile.mkstemp(suffix=".docx")[1])
-    document.save(temp_path)
+    temp_path = _make_temp_path(".docx")
+    document.save(temp_path) # type: ignore
     file_id = _upload_generated_file(temp_path, filename, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     if not file_id:
         return []
@@ -180,13 +194,13 @@ def _handle_generate_xlsx_tool(args: Dict[str, Any], vector_store_id: Optional[s
         sheet_rows = sheet_def.get("rows") or []
         ws = wb.active if first_sheet else wb.create_sheet()
         first_sheet = False
-        ws.title = title[:31]
+        ws.title = title[:31] # type: ignore
         for row in sheet_rows:
             if isinstance(row, list):
-                ws.append(row)
+                ws.append(row) # type: ignore
             else:
-                ws.append([row])
-    temp_path = Path(tempfile.mkstemp(suffix=".xlsx")[1])
+                ws.append([row]) # type: ignore
+    temp_path = _make_temp_path(".xlsx")
     wb.save(temp_path)
     file_id = _upload_generated_file(temp_path, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     if not file_id:
@@ -408,9 +422,9 @@ def create_app() -> Flask:
                     {"role": "system", "content": GENERAL_CHAT_SYSTEM},
                     {"role": "user", "content": msg},
                 ],
-                tools=tools or None,
+                tools=tools or None, # type: ignore
             )
-            serialized = _serialize(resp)
+            serialized = _ensure_dict(resp)
             text = _extract_text(resp) or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
             generated_files = []
