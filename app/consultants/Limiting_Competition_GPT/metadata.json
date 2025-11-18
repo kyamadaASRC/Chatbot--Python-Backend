@@ -1,0 +1,20 @@
+{
+  "key": "limiting_competition_gpt",
+  "display_name": "Limiting Competition GPT",
+  "instruction_file": "instructions.txt",
+  "model_try": ["gpt-5", "gpt-4.1"],
+  "summary": "Take data from submitted requirements package and fill out appropriate limiting competition template",
+  "tools": [
+    {"type": "file_search"},
+    {"type": "web_search_preview"},
+    {"type": "code_interpreter"}
+  ],
+  "aliases": ["limiting competition", "limiting competition consultant"],
+  "keywords": ["limiting", "competition"],
+  "conversation_starters" : [
+    "Route me: Under-SAT vs Part 15 vs 8.4 vs 16.5 based on my info, then pick regular | brand-name | bridge and Generate documents as individual files.",
+    "Draft a bridge justification: continuity of ops, transition barriers, timeline to recompete, and interim risk mitigations—then add the Future Competition Plan.",
+    "We’re Part 15 – urgency (6.302-2). Build a J&A, show the 30-day posting rule, and include a strong future-competition plan with milestones.",
+    "We’re FAR 8.4 – brand-name on MAS. Draft an LSJ; include the features matrix and post-with-RFQ notes. Pull vendors from Market Research and fill 09c/09d."
+  ]
+}

@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MFR - Limiting Competition under SAT</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: #ffffff;
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        input[type="text"], input[type="number"], input[type="date"], textarea, select {
+            border: 1px solid #d1d5db; /* Light gray border */
+            border-radius: 0.375rem; /* Small rounded corners */
+            padding: 0.5rem 0.75rem;
+            width: 100%;
+            font-size: 0.9rem;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        input[type="radio"], input[type="checkbox"] {
+            margin-right: 0.5rem;
+        }
+        label {
+            display: flex;
+            align-items: center;
+            font-size: 0.95rem;
+            color: #374151; /* Darker gray text */
+        }
+        .section-title {
+            font-weight: 600;
+            font-size: 1.125rem; /* Larger font for titles */
+            color: #1f2937; /* Darkest gray text */
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb; /* Subtle separator */
+        }
+        .subsection-title {
+            font-weight: 500;
+            font-size: 1rem;
+            color: #374151;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .button-primary {
+            background-color: #4f46e5; /* Indigo */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .button-primary:hover {
+            background-color: #4338ca; /* Darker indigo on hover */
+        }
+        .far-authority-suggestions {
+            background-color: #fffbeb; /* Light yellow background */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            border: 1px solid #fde68a;
+            color: #78350f; /* Darker yellow text */
+            font-size: 0.875rem;
+        }
+        .disabled-option {
+            opacity: 0.6;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .disabled-option input[type="text"],
+        .disabled-option textarea,
+        .disabled-option select {
+            background-color: #e5e7eb;
+            cursor: not-allowed;
+        }
+        .dynamic-input-container {
+            display: none;
+        }
+        .signature-line {
+            height: 1px;
+            background-color: #a0aec0;
+            margin-top: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Styles for printing */
+        @media print {
+            body {
+                background-color: #ffffff;
+                margin: 0;
+                padding: 0;
+            }
+            .container {
+                margin: 0;
+                padding: 1rem; /* Adjust padding for print */
+                box-shadow: none; /* Remove shadow for print */
+                border-radius: 0;
+                width: 100%; /* Ensure it takes full width */
+                max-width: none; /* Override max-width */
+            }
+            .button-primary, .far-authority-suggestions { /* Hide buttons and suggestions when printing */
+                display: none;
+            }
+            input[type="text"], input[type="number"], textarea, select {
+                border: none; /* Remove borders for a cleaner print */
+                border-bottom: 1px dashed #cccccc; /* Optional: subtle line for input fields */
+                padding: 0; /* Remove padding */
+                font-size: inherit; /* Inherit font size */
+            }
+            /* Ensure text fields have space even if empty */
+            input[type="text"]:empty::after, input[type="number"]:empty::after, textarea:empty::after {
+                content: "____________________"; /* Placeholder for empty fields */
+                color: #cccccc;
+            }
+            /* Hide disabled options for print */
+            .disabled-option {
+                display: none !important;
+            }
+            /* Ensure radio/checkbox selections are visible */
+            input[type="radio"]:checked::before, input[type="checkbox"]:checked::before {
+                content: 'X'; /* Or checkmark symbol */
+                display: inline-block;
+                width: 1em;
+                margin-left: -1em;
+                font-weight: bold;
+            }
+            label {
+                align-items: flex-start; /* Align label content at the top for multi-line options */
+            }
+            .dynamic-input-container {
+                display: block; /* Show dynamic containers for print */
+            }
+            .dynamic-hide-on-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-xl font-bold text-center mb-6 text-gray-800">MFR - Limiting Competition under SAT</h1>
+        <p class="text-center text-sm mb-8 text-gray-600">
+            For All Actions Over the Micro-Purchase Threshold ($15K*) and Under the Simplified Acquisition Threshold (SAT)<br>
+            Use for FAR Part 8, 13, or 16, Including Brand Name
+        </p>
+
+        <div class="flex flex-wrap gap-4 mb-8">
+            <button type="button" class="button-primary" onclick="resetFormAndState();">Reset Form</button>
+            <button type="button" class="button-primary" onclick="window.print();">Print to PDF</button>
+        </div>
+
+        <form id="mfr-form" class="space-y-6">
+            <!-- Section 1: Contracting Activity -->
+            <div class="section">
+                <p class="section-title">1. Contracting Activity:</p>
+                <p class="text-gray-700">U.S. Army Contracting Command - Rock Island, Rock Island Arsenal, Rock Island IL 61299-8000.</p>
+            </div>
+
+            <!-- Section 2: Description of Action -->
+            <div class="section">
+                <p class="section-title">2. Description of Action:</p>
+
+                <div class="subsection-title">Nature:</div>
+                <div class="flex flex-wrap gap-4 mb-4" id="nature-options">
+                    <label>
+                        <input type="radio" name="nature" value="new-requirement" class="form-radio text-indigo-600">
+                        New Requirement
+                    </label>
+                    <label>
+                        <input type="radio" name="nature" value="follow-on-requirement" class="form-radio text-indigo-600">
+                        Follow-on Requirement
+                    </label>
+                    <label>
+                        <input type="radio" name="nature" value="modification" class="form-radio text-indigo-600">
+                        Modification
+                    </label>
+                </div>
+                <div id="modification-input-container" class="dynamic-input-container mb-4">
+                     <label>Modification Number: <input type="text" name="modification-number" id="modification-number" placeholder="Enter Modification #" class="ml-2 w-40"></label>
+                </div>
+                
+                <div class="subsection-title">Contract Vehicle:</div>
+                <select name="contract-vehicle" id="contract-vehicle-select" class="mb-4">
+                    <option value="">Select a Contract Vehicle</option>
+                    <option value="purchase-order">Purchase Order Number</option>
+                    <option value="bpa-nfs">Blanket Purchase Agreement not on the Federal Supply Schedule</option>
+                    <option value="bpa-order">Order against a BPA not on the Federal Supply Schedule</option>
+                    <option value="fss">Order/BPA# against FSS Contract Number</option>
+                    <option value="idiq">Order # against Multiple Award IDIQ Contract Name or #</option>
+                    <option value="idc">Order # against a Single Award IDC Contract #</option>
+                </select>
+
+                <div id="contract-vehicle-inputs" class="space-y-2 mb-4">
+                    <!-- Dynamic inputs will be inserted here -->
+                </div>
+                
+                <div class="subsection-title">Pricing:</div>
+                <div class="flex flex-wrap gap-4 mb-4" id="pricing-options">
+                    <label>
+                        <input type="checkbox" name="pricing" value="fixed-price" class="form-checkbox text-indigo-600">
+                        Fixed Price
+                    </label>
+                    <label>
+                        <input type="checkbox" name="pricing" value="time-materials" class="form-checkbox text-indigo-600">
+                        Time & Materials/Labor Hours
+                    </label>
+                    <label>
+                        <input type="checkbox" name="pricing" value="cost-reimbursable" class="form-checkbox text-indigo-600">
+                        Cost Reimbursable
+                    </label>
+                </div>
+
+                <div class="subsection-title">Funds:</div>
+                <div class="flex flex-wrap gap-4 items-center mb-4">
+                    <label class="flex items-center">
+                        Funding Type: <input type="text" class="ml-2 w-40">
+                    </label>
+                    <label class="flex items-center">
+                        Fiscal Year: <input type="text" class="ml-2 w-24">
+                    </label>
+                </div>
+
+                <div class="subsection-title">Name of Proposed Contractor(s):</div>
+                <div class="flex flex-col gap-2 mb-4" id="contractor-options">
+                    <label class="flex items-center">
+                        <input type="radio" name="proposed-contractor" value="only-one" id="contractor-sole-source" class="form-radio text-indigo-600">
+                        Only one contractor:
+                        <input type="text" name="sole-source-contractor" placeholder="Enter Contractor Name" class="ml-2">
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="proposed-contractor" value="any-reseller" id="contractor-reseller" class="form-radio text-indigo-600">
+                        Any reseller of required brand name supply:
+                        <input type="text" name="brand-name-item" placeholder="Enter Brand Name Item" class="ml-2">
+                    </label>
+                </div>
+
+                <div class="subsection-title">Total Estimated Value of Proposed Action, Inclusive of all Options:</div>
+                <label class="flex items-center">
+                    $ <input type="number" name="estimated-value" id="estimated-value" class="ml-2 w-40" step="0.01" min="0">
+                </label>
+            </div>
+
+            <!-- Section 3: Description of Services or Supplies -->
+            <div class="section">
+                <p class="section-title">3. Description of Services or Supplies:</p>
+                <p class="text-sm text-gray-700 mb-2">
+                    In layman's terms, briefly describe the services or supplies to be provided, including make & model number where appropriate.
+                    Include quantities of supplies or period of performance for services. Provide information for any options included.
+                </p>
+                <textarea name="services-description"></textarea>
+            </div>
+
+            <!-- Section 4: Authority -->
+            <div class="section">
+                <p class="section-title">4. Authority: Mark the applicable exception, choose only one</p>
+
+                <div class="far-authority-suggestions" id="far-suggestions">
+                    <p class="font-bold">Suggested FAR Authorities based on Contract Vehicle:</p>
+                    <p id="far-suggestion-text" class="text-sm"></p>
+                </div>
+
+                <select name="far-authority" id="far-authority-select" class="mt-4">
+                     <option value="" disabled selected>Select an authority</option>
+                </select>
+                <div id="other-authority-input-container" class="dynamic-input-container mt-2">
+                    <label>Other Exception: <input type="text" name="other-far-authority" placeholder="Enter Specific Authority" class="ml-2"></label>
+                </div>
+            </div>
+
+            <!-- Section 5: Reasons for Authority Cited -->
+            <div class="section">
+                <p class="section-title">5. Reasons for Authority Cited:</p>
+                <div class="space-y-4">
+                    <div id="sole-source-reason-a">
+                        <p class="subsection-title">**Explain why the intended contractor is the only reasonable source who can provide the required supplies or services. Discuss the unique capabilities, expertise, etc. that support the lack of competition.**</p>
+                        <textarea name="reason-a"></textarea>
+                    </div>
+                    <div id="brand-name-reason-b">
+                        <p class="subsection-title">**For a brand name restriction - explain why another brand name product does not meet or cannot be modified to meet the Government's requirements.**</p>
+                        <textarea name="reason-b"></textarea>
+                    </div>
+                    <div id="reason-c">
+                        <p class="subsection-title">**Describe the detrimental effects/serious injury to the mission of the requiring activity or to the government that will result if this justification is not approved and the product or service cannot be provided.**</p>
+                        <textarea name="reason-c"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 6: Publicizing Contract Actions -->
+            <div class="section">
+                <p class="section-title">6. Publicizing Contract Actions:</p>
+                <div id="publicizing-synopsis-content">
+                    <p class="text-sm text-gray-700 mb-2">The public display and synopsis requirements of 5.101 and 5.203</p>
+                    <div class="flex flex-wrap gap-4 mb-4">
+                        <label>
+                            <input type="radio" name="publicizing-action" value="do-not-apply-threshold" id="publicizing-do-not-apply-threshold" class="form-radio text-indigo-600">
+                            do not apply due to the $ threshold,
+                        </label>
+                        <label>
+                            <input type="radio" name="publicizing-action" value="apply-followed" id="publicizing-apply-followed" class="form-radio text-indigo-600">
+                            apply and will be followed, or
+                        </label>
+                        <label class="flex items-center">
+                            <input type="radio" name="publicizing-action" value="do-not-apply-exception" id="publicizing-do-not-apply-exception" class="form-radio text-indigo-600">
+                            do not apply due to an exception at 5.202
+                            <select name="exception-details" id="exception-details-select" class="ml-2 flex-grow">
+                                <option value="">Select an exception</option>
+                                <option value="far-5-202-a-1">FAR 5.202(a)(1): National security would be compromised.</option>
+                                <option value="far-5-202-a-2">FAR 5.202(a)(2): Unusual and compelling urgency (conditions in 6.302-2).</option>
+                                <option value="far-5-202-a-3">FAR 5.202(a)(3): Foreign government reimbursement or international agreement.</option>
+                                <option value="far-5-202-a-4">FAR 5.202(a)(4): Authorized/required by statute (e.g., 8(a)) or specific source.</option>
+                                <option value="far-5-202-a-5">FAR 5.202(a)(5): Utility services, one source available.</option>
+                                <option value="far-5-202-a-6">FAR 5.202(a)(6): Order placed under Subpart 16.5 (existing contract).</option>
+                                <option value="far-5-202-a-8">FAR 5.202(a)(8): Unsolicited research proposal, disclosure compromises originality.</option>
+                                <option value="far-5-202-a-9">FAR 5.202(a)(9): Perishable subsistence supplies, advance notice inappropriate.</option>
+                                <option value="far-5-202-a-11">FAR 5.202(a)(11): Existing contract previously synopsized in sufficient detail.</option>
+                                <option value="far-5-202-a-12">FAR 5.202(a)(12): Defense agency, performed outside US, local sources only.</option>
+                                <option value="far-5-202-a-13">FAR 5.202(a)(13): Under SAT, made via GPE, permits electronic response.</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="publicizing-posting-content">
+                    <p class="text-sm text-gray-700 mb-2">Requirement to post justification IAW 8.405-6(b)(3), 13.105(c), or 16.505(a)(4)(iii)(A)</p>
+                    <select name="posting-justification" id="posting-justification-select" class="mt-4">
+                        <option value="" disabled selected>Select a posting justification</option>
+                    </select>
+                    <div id="posting-exception-container" class="dynamic-input-container mt-2">
+                        <label>Exception Details: <input type="text" name="posting-exception-details" id="posting-exception-details" placeholder="Enter Details" class="ml-2 flex-grow"></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 7: Market Research -->
+            <div class="section">
+                <p class="section-title">7. Market Research:</p>
+                <div class="space-y-4">
+                    <label class="flex items-center">
+                        Date Market Research Completed: (Must be within 18 months)
+                        <input type="date" name="market-research-date" id="market-research-date" class="ml-2 w-40">
+                    </label>
+                    <div>
+                        <p class="subsection-title">Provide a listing of sources identified in market research and their qualifications. Specifically address why another contractor identified through market research cannot meet the Government's needs.</p>
+                        <textarea name="market-research-sources"></textarea>
+                    </div>
+                    <div id="market-research-brand-name" class="dynamic-input-container">
+                        <p class="subsection-title">Explain why alternative brand name products identified through market research cannot meet the Government's need.</p>
+                        <textarea name="market-research-brand-name-text"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 8: Approval -->
+            <div class="section">
+                <p class="section-title">8. Approval:</p>
+                <p class="text-sm text-gray-700 mb-2">
+                    I hereby determine that the anticipated cost or price to the Government for this contract action will be fair and reasonable based upon
+                    (describe technique to be used, e.g. price analysis, cost analysis, etc).
+                </p>
+                <textarea name="approval-technique"></textarea>
+                <p class="mt-4 text-sm text-gray-700">
+                    Based on the foregoing, I approve this justification to limit competition subject to availability of funds, and provided that the services and supplies herein described have otherwise been authorized for acquisition.
+                </p>
+                <div class="mt-6 flex flex-col items-start space-y-1">
+                    <p class="text-base font-medium">Signature</p>
+                    <div class="signature-line w-full h-8"></div>
+                    <p class="text-base font-medium">Contracting Officer</p>
+                </div>
+                <p class="mt-8 text-xs text-gray-600">* Micropurchase threshold for supplies and non-SCA covered services is $15,000.00. Micropurchase threshold for SCA covered services is $2,500.00 and DBA covered construction is $2,000.00.</p>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const FAR_AUTHORITIES = {
+            'purchase-order': [
+                { value: 'far-13-106-1-b-1-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - brand name', type: 'brand-name' },
+                { value: 'far-13-106-1-b-1-non-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - urgency, exclusive licensing agreements, or industrial mobilization (NOT BRAND NAME)', type: 'other-than-brand' },
+            ],
+            'bpa-nfs': [
+                { value: 'far-13-106-1-b-1-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - brand name', type: 'brand-name' },
+                { value: 'far-13-106-1-b-1-non-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - urgency, exclusive licensing agreements, or industrial mobilization (NOT BRAND NAME)', type: 'other-than-brand' },
+            ],
+            'bpa-order': [
+                { value: 'far-13-106-1-b-1-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - brand name', type: 'brand-name' },
+                { value: 'far-13-106-1-b-1-non-brand', text: 'FAR 13.106-1(b)(1): For purchases not exceeding the simplified acquisition threshold - urgency, exclusive licensing agreements, or industrial mobilization (NOT BRAND NAME)', type: 'other-than-brand' },
+            ],
+            'fss': [
+                { value: 'far-8-405-6-a-1-i-b-b-1-brand', text: 'FAR 8.405-6(a)(1)(i)(B) and 8.405-6(b)(1)Brand Name', type: 'brand-name' },
+                { value: 'far-8-405-6-a-1-i-a-urgency', text: 'FAR 8.405-6(a)(1)(i)(A) Urgency', type: 'other-than-brand' },
+                { value: 'far-8-405-6-a-1-i-b-only-source', text: 'FAR 8.405-6(a)(1)(i)(B) Only One Source is Capable', type: 'other-than-brand' },
+                { value: 'far-8-405-6-a-1-i-c-logical-follow-on', text: 'FAR 8.405-6(a)(1)(i)(C) Logical Follow-on', type: 'other-than-brand' },
+            ],
+            'idiq': [
+                { value: 'far-16-505-b-2-i-b-a-4-brand', text: 'FAR 16.505(b)(2)(i)(B) and 16.505(a)(4) Brand Name', type: 'brand-name' },
+                { value: 'far-16-505-b-2-i-a-urgency', text: 'FAR 16.505(b)(2)(i)(A) Urgency', type: 'other-than-brand' },
+                { value: 'far-16-505-b-2-i-b-only-one-awardee', text: 'FAR 16.505(b)(2)(i)(B) Only One Awardee is Capable', type: 'other-than-brand' },
+                { value: 'far-16-505-b-2-i-c-logical-follow-on', text: 'FAR 16.505(b)(2)(i)(C) Logical Follow-on', type: 'other-than-brand' },
+            ],
+            'idc': [
+                { value: 'far-16-505-b-2-i-b-a-4-brand', text: 'FAR 16.505(b)(2)(i)(B) and 16.505(a)(4) Brand Name', type: 'brand-name' },
+                { value: 'far-16-505-b-2-i-a-urgency', text: 'FAR 16.505(b)(2)(i)(A) Urgency', type: 'other-than-brand' },
+                { value: 'far-16-505-b-2-i-b-only-one-awardee', text: 'FAR 16.505(b)(2)(i)(B) Only One Awardee is Capable', type: 'other-than-brand' },
+                { value: 'far-16-505-b-2-i-c-logical-follow-on', text: 'FAR 16.505(b)(2)(i)(C) Logical Follow-on', type: 'other-than-brand' },
+            ]
+        };
+
+        const POSTING_JUSTIFICATIONS = {
+            'not-brand': [
+                { value: 'not-brand-under-sat-no-posting', text: 'Action is NOT a brand name restriction and is under SAT, no posting required' }
+            ],
+            'brand-13-8': [
+                { value: 'brand-under-25k-far13-8-no-posting', text: 'Action is a brand name restriction, under $25K, no posting required' },
+                { value: 'brand-over-25k-far13-8-posted', text: 'Action is a brand name restriction, over $25k. It will be redacted and posted with the solicitation' }
+            ],
+            'brand-16': [
+                { value: 'brand-under-30k-far16-no-posting', text: 'Action is a brand name restriction, under $30k, no posting required.' },
+                { value: 'brand-over-30k-far16-posted', text: 'Action is a brand name restriction, over $30K. It will be redacted and posted with the solicitation.' },
+            ]
+        };
+
+        const SAT = 350000;
+        const SYNOPSIS_THRESHOLD_FAR13 = 25000;
+        const SYNOPSIS_THRESHOLD_FAR16 = 30000;
+        const MICROPURCHASE_THRESHOLD = 15000;
+
+        // Store references to elements for easier access
+        const natureRadios = document.querySelectorAll('input[name="nature"]');
+        const modificationInputContainer = document.getElementById('modification-input-container');
+        const modificationNumberInput = document.getElementById('modification-number');
+        const contractVehicleSelect = document.getElementById('contract-vehicle-select');
+        const contractVehicleInputsDiv = document.getElementById('contract-vehicle-inputs');
+        const contractorRadios = document.querySelectorAll('input[name="proposed-contractor"]');
+        const soleSourceContractorInput = document.querySelector('input[name="sole-source-contractor"]');
+        const brandNameItemInput = document.querySelector('input[name="brand-name-item"]');
+        const brandNameReasonB = document.getElementById('brand-name-reason-b');
+        const soleSourceReasonA = document.getElementById('sole-source-reason-a');
+        const reasonC = document.getElementById('reason-c');
+        const estimatedValueInput = document.getElementById('estimated-value');
+        const publicizingActionRadios = document.querySelectorAll('input[name="publicizing-action"]');
+        const exceptionDetailsSelect = document.getElementById('exception-details-select');
+        const postingJustificationSelect = document.getElementById('posting-justification-select');
+        const postingExceptionContainer = document.getElementById('posting-exception-container');
+        const postingExceptionDetailsInput = document.getElementById('posting-exception-details');
+        const farSuggestionText = document.getElementById('far-suggestion-text');
+        const farAuthoritySelect = document.getElementById('far-authority-select');
+        const otherAuthorityInputContainer = document.getElementById('other-authority-input-container');
+        const publicizingSynopsisContent = document.getElementById('publicizing-synopsis-content');
+        const publicizingPostingContent = document.getElementById('publicizing-posting-content');
+        const marketResearchDateInput = document.getElementById('market-research-date');
+        const marketResearchBrandNameSection = document.getElementById('market-research-brand-name');
+        
+        // Helper function to show/hide and disable inputs within a container
+        function setSectionVisibility(container, isVisible) {
+            container.style.display = isVisible ? 'block' : 'none';
+        }
+
+        // Helper function to disable inputs within a container
+        function setInputsDisabled(container, isDisabled) {
+            container.classList.toggle('disabled-option', isDisabled);
+            container.querySelectorAll('input, select, textarea').forEach(input => {
+                input.disabled = isDisabled;
+                if (isDisabled) {
+                    if (input.type === 'checkbox' || input.type === 'radio') {
+                        input.checked = false;
+                    } else if (input.tagName === 'SELECT') {
+                        input.selectedIndex = 0;
+                    } else {
+                        input.value = '';
+                    }
+                }
+            });
+        }
+        
+        // --- Master function to filter and enable/disable FAR Authority options ---
+        function updateFarAuthorityDropdown() {
+            const selectedVehicle = contractVehicleSelect.value;
+            const selectedContractorType = document.querySelector('input[name="proposed-contractor"]:checked');
+            
+            farAuthoritySelect.innerHTML = '<option value="" disabled selected>Select an authority</option>';
+
+            let farOptions = FAR_AUTHORITIES[selectedVehicle] || [];
+            
+            // Refined logic based on proposed contractor type
+            if (selectedContractorType) {
+                if (selectedContractorType.value === 'only-one') {
+                    farOptions = farOptions.filter(opt => opt.type !== 'brand-name');
+                } else if (selectedContractorType.value === 'any-reseller') {
+                    farOptions = farOptions.filter(opt => opt.type !== 'other-than-brand');
+                }
+            }
+            
+            farOptions.forEach(auth => {
+                const option = document.createElement('option');
+                option.value = auth.value;
+                option.textContent = auth.text;
+                farAuthoritySelect.appendChild(option);
+            });
+            
+            // Add the "other" option at the end if applicable to FAR Part 16
+            if (selectedVehicle === 'idiq' || selectedVehicle === 'idc') {
+                const otherOption = document.createElement('option');
+                otherOption.value = 'far-16-505-b-2-i-g';
+                otherOption.textContent = 'FAR 16.505(b)(2)(i)(G) - Other exception listed at FAR 6.302';
+                farAuthoritySelect.appendChild(otherOption);
+            }
+            
+            updateReasonSectionStates();
+            updateMarketResearchSectionState();
+            updatePostingJustificationDropdown();
+        }
+        
+        // --- Function to toggle "Proposed Contractor" inputs and filter FAR
+        function toggleContractorInputs() {
+            const soleSourceRadio = document.getElementById('contractor-sole-source');
+            const resellerRadio = document.getElementById('contractor-reseller');
+
+            if (soleSourceRadio.checked) {
+                soleSourceContractorInput.disabled = false;
+                brandNameItemInput.disabled = true;
+                brandNameItemInput.value = '';
+            } else if (resellerRadio.checked) {
+                soleSourceContractorInput.disabled = true;
+                soleSourceContractorInput.value = '';
+                brandNameItemInput.disabled = false;
+            } else {
+                soleSourceContractorInput.disabled = true;
+                soleSourceContractorInput.value = '';
+                brandNameItemInput.disabled = true;
+                brandNameItemInput.value = '';
+            }
+            updateFarAuthorityDropdown();
+        }
+
+        // Function to dynamically show/hide contract vehicle specific inputs
+        function toggleContractVehicleInputs() {
+            contractVehicleInputsDiv.innerHTML = ''; // Clear previous inputs
+            const selectedVehicle = contractVehicleSelect.value;
+            let inputsHtml = '';
+
+            switch (selectedVehicle) {
+                case 'purchase-order':
+                    inputsHtml = `<label>Purchase Order Number: <input type="text" name="po-number" placeholder="Enter PO Number"></label>`;
+                    break;
+                case 'bpa-nfs':
+                    inputsHtml = `<label>BPA Number: <input type="text" name="bpa-number" placeholder="Enter BPA Number"></label>`;
+                    break;
+                case 'bpa-order':
+                    inputsHtml = `
+                        <label>BPA Number: <input type="text" name="bpa-number" placeholder="Enter BPA Number"></label>
+                        <label>Call Order Number: <input type="text" name="call-order-number" placeholder="Enter Call Order Number"></label>`;
+                    break;
+                case 'fss':
+                    inputsHtml = `
+                        <label>FSS Contract Number: <input type="text" name="fss-contract-number" placeholder="Enter FSS Contract Number"></label>
+                        <label>Order/BPA Number: <input type="text" name="fss-order-number" placeholder="Enter Order/BPA#"></label>`;
+                    break;
+                case 'idiq':
+                    inputsHtml = `
+                        <label>IDIQ Base Contract Number: <input type="text" name="idiq-base-number" placeholder="Enter IDIQ Base Contract #"></label>
+                        <label>Task/Delivery Order Number: <input type="text" name="idiq-task-number" placeholder="Enter T/DO #"></label>`;
+                    break;
+                case 'idc':
+                    inputsHtml = `
+                        <label>Base Contract Number: <input type="text" name="idc-base-number" placeholder="Enter Base Contract #"></label>
+                        <label>Task/Delivery Order Number: <input type="text" name="idc-task-number" placeholder="Enter T/DO #"></label>`;
+                    break;
+            }
+            if (inputsHtml) {
+                contractVehicleInputsDiv.innerHTML = inputsHtml;
+                contractVehicleInputsDiv.style.display = 'block';
+            } else {
+                contractVehicleInputsDiv.style.display = 'none';
+            }
+            
+            updateFarAuthorityDropdown();
+        }
+
+        // Function to update the visibility and disabled state of the Reason paragraphs
+        function updateReasonSectionStates() {
+            const selectedAuthorityText = farAuthoritySelect.options[farAuthoritySelect.selectedIndex]?.textContent || '';
+            const isBrandNameAuthority = selectedAuthorityText.includes('brand name');
+            const isSoleSourceAuthority = selectedAuthorityText.includes('Only One Source') || selectedAuthorityText.includes('NOT BRAND NAME');
+            
+            setInputsDisabled(soleSourceReasonA, !isSoleSourceAuthority);
+            setInputsDisabled(brandNameReasonB, !isBrandNameAuthority);
+            setInputsDisabled(reasonC, false);
+        }
+        
+        // Function to update Publicizing Synopsis section
+        function updatePublicizingSynopsisState() {
+            const selectedVehicle = contractVehicleSelect.value;
+            const estimatedValue = parseFloat(estimatedValueInput.value);
+            const isFar13Vehicle = (selectedVehicle === 'purchase-order' || selectedVehicle === 'bpa-nfs' || selectedVehicle === 'bpa-order');
+            const shouldBeEnabled = isFar13Vehicle && estimatedValue >= SYNOPSIS_THRESHOLD_FAR13;
+
+            setInputsDisabled(publicizingSynopsisContent, !shouldBeEnabled);
+            if(shouldBeEnabled) {
+                updatePublicizingRequirements();
+            }
+        }
+
+        // Function to update Publicizing Contract Actions based on value
+        function updatePublicizingRequirements() {
+            const estimatedValue = parseFloat(estimatedValueInput.value);
+            
+            if (!publicizingSynopsisContent.classList.contains('disabled-option')) {
+                publicizingActionRadios.forEach(radio => radio.checked = false);
+                if (isNaN(estimatedValue) || estimatedValue < SYNOPSIS_THRESHOLD_FAR13) {
+                    document.getElementById('publicizing-do-not-apply-threshold').checked = true;
+                } else {
+                    document.getElementById('publicizing-apply-followed').checked = true;
+                }
+            }
+        }
+
+        // Function to update Posting Justification dropdown
+        function updatePostingJustificationDropdown() {
+            const selectedAuthority = farAuthoritySelect.value;
+            const estimatedValue = parseFloat(estimatedValueInput.value);
+
+            let options = [];
+            let showJustification = false;
+
+            if (selectedAuthority) {
+                showJustification = true;
+                const selectedText = farAuthoritySelect.options[farAuthoritySelect.selectedIndex].textContent;
+                
+                if (selectedText.includes('NOT BRAND NAME') || selectedText.includes('Only One Source') || selectedAuthority === 'far-16-505-b-2-i-g') {
+                     options = POSTING_JUSTIFICATIONS['not-brand'];
+                } else if (selectedText.includes('FAR 13') || selectedText.includes('FAR 8')) {
+                    if (estimatedValue < SYNOPSIS_THRESHOLD_FAR13) {
+                        options = [{ value: 'brand-under-25k-far13-8-no-posting', text: 'Action is a brand name restriction, under $25K, no posting required' }];
+                    } else {
+                        options = [{ value: 'brand-over-25k-far13-8-posted', text: 'Action is a brand name restriction, over $25k. It will be redacted and posted with the solicitation' }];
+                    }
+                } else if (selectedText.includes('FAR 16')) {
+                    if (estimatedValue < SYNOPSIS_THRESHOLD_FAR16) {
+                        options = [{ value: 'brand-under-30k-far16-no-posting', text: 'Action is a brand name restriction, under $30k, no posting required.' }];
+                    } else {
+                        options = [{ value: 'brand-over-30k-far16-posted', text: 'Action is a brand name restriction, over $30K. It will be redacted and posted with the solicitation.' }];
+                    }
+                }
+            }
+            
+            postingJustificationSelect.innerHTML = '<option value="" disabled selected>Select a posting justification</option>';
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                postingJustificationSelect.appendChild(option);
+            });
+            
+            if (options.length > 0) {
+                postingJustificationSelect.value = options[0].value;
+            }
+        }
+
+        // Function to handle "other authority" input visibility
+        function toggleOtherAuthorityInput() {
+            const selectedAuthority = farAuthoritySelect.value;
+            const isOtherSelected = selectedAuthority === 'far-16-505-b-2-i-g';
+            setSectionVisibility(otherAuthorityInputContainer, isOtherSelected);
+        }
+
+        // Function to check if market research date is within 18 months
+        function checkMarketResearchDate() {
+            const dateInput = marketResearchDateInput.value;
+            if (dateInput) {
+                const inputDate = new Date(dateInput);
+                const eighteenMonthsAgo = new Date();
+                eighteenMonthsAgo.setMonth(eighteenMonthsAgo.getMonth() - 18);
+
+                if (inputDate < eighteenMonthsAgo) {
+                    const alertBox = document.createElement('div');
+                    alertBox.style.cssText = `
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        padding: 20px;
+                        background: white;
+                        border: 2px solid #ef4444;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                        z-index: 1000;
+                        text-align: center;
+                    `;
+                    alertBox.innerHTML = `
+                        <p class="font-bold text-lg mb-2 text-red-600">Market Research Date Warning</p>
+                        <p class="text-gray-700">The market research date is more than 18 months ago. Please conduct and document new market research.</p>
+                        <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md" onclick="this.parentNode.remove();">OK</button>
+                    `;
+                    document.body.appendChild(alertBox);
+                }
+            }
+        }
+
+        // Custom function to check estimated value and display a warning if over threshold
+        function checkEstimatedValue() {
+            const estimatedValue = parseFloat(estimatedValueInput.value);
+            if (!isNaN(estimatedValue) && estimatedValue > SAT) {
+                const alertBox = document.createElement('div');
+                alertBox.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    padding: 20px;
+                    background: white;
+                    border: 2px solid #ef4444;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    z-index: 1000;
+                    text-align: center;
+                    max-width: 400px;
+                `;
+                alertBox.innerHTML = `
+                    <p class="font-bold text-lg mb-2 text-red-600">Value Exceeds Threshold</p>
+                    <p class="text-gray-700">This template is exclusively for actions below the Simplified Acquisition Threshold (SAT). Please use the appropriate template for actions greater than SAT.</p>
+                    <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md" onclick="this.parentNode.remove();">OK</button>
+                `;
+                document.body.appendChild(alertBox);
+            }
+        }
+
+        // Custom function to reset the form and its dynamic state
+        function resetFormAndState() {
+            const form = document.getElementById('mfr-form');
+            form.reset();
+            setSectionVisibility(modificationInputContainer, false);
+            setSectionVisibility(contractVehicleInputsDiv, false);
+            setSectionVisibility(otherAuthorityInputContainer, false);
+            setInputsDisabled(soleSourceReasonA, true);
+            setInputsDisabled(brandNameReasonB, true);
+            setInputsDisabled(reasonC, false);
+            setInputsDisabled(publicizingSynopsisContent, false);
+            setInputsDisabled(publicizingPostingContent, false);
+            setInputsDisabled(marketResearchBrandNameSection, true);
+            
+            updateFarAuthorityDropdown();
+        }
+
+        // Function to update the disabled state of the Market Research brand-name section
+        function updateMarketResearchSectionState() {
+            const selectedAuthorityText = farAuthoritySelect.options[farAuthoritySelect.selectedIndex]?.textContent || '';
+            const isBrandNameAuthoritySelected = selectedAuthorityText.includes('brand name');
+            setSectionVisibility(marketResearchBrandNameSection, isBrandNameAuthoritySelected);
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            natureRadios.forEach(radio => radio.addEventListener('change', function() {
+                setSectionVisibility(modificationInputContainer, this.value === 'modification');
+            }));
+            
+            contractVehicleSelect.addEventListener('change', toggleContractVehicleInputs);
+            
+            contractorRadios.forEach(radio => radio.addEventListener('change', toggleContractorInputs));
+            
+            estimatedValueInput.addEventListener('change', checkEstimatedValue);
+            estimatedValueInput.addEventListener('input', () => {
+                updatePublicizingSynopsisState();
+                updatePostingJustificationDropdown();
+            });
+            
+            farAuthoritySelect.addEventListener('change', () => {
+                updateReasonSectionStates();
+                updateMarketResearchSectionState();
+                updatePostingJustificationDropdown();
+                toggleOtherAuthorityInput();
+            });
+            
+            document.getElementById('publicizing-do-not-apply-exception').addEventListener('change', function() {
+                exceptionDetailsSelect.disabled = !this.checked;
+                if (!this.checked) {
+                    exceptionDetailsSelect.value = '';
+                }
+            });
+            
+            marketResearchDateInput.addEventListener('change', checkMarketResearchDate);
+            
+            resetFormAndState();
+        });
+    </script>
+</body>
+</html>

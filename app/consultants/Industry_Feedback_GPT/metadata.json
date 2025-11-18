@@ -1,7 +1,7 @@
 {
   "key": "industry_feedback_gpt",
   "display_name": "Industry Feedback",
-  "instruction_file": "instruction.txt",
+  "instruction_file": "instructions.txt",
   "model_try": ["gpt-5-pro","gpt-5"],
   "summary": "Analyzes industry comments and produces structured feedback reports.",
   "tools": [

@@ -1,0 +1,20 @@
+{
+  "key": "acquisition_plan_acquisition_strategy_gpt",
+  "display_name": "Acquisition_Plan/ Acquisition Strategy GPT ",
+  "instruction_file": "instructions.txt",
+  "model_try": ["gpt-5", "gpt-4.1"],
+  "summary": "Compile inputted data to build an acquisition plan and/or acquisition strategy.",
+  "tools": [
+    {"type": "file_search"},
+    {"type": "web_search_preview"},
+    {"type": "code_interpreter"}
+  ],
+  "aliases": ["ap", "acquisition strategy", "acquisition plan"],
+  "keywords": ["acquisition", "naics", "market research"],
+  "conversation_starters" : [
+    "Draft a Combined Acquisiton Strategy / Acquisition Plan for this service buy. Pull active + inactive SAM.gov exemplars and FPDS history; fill every section; return the .docx, Milestones .xlsx, Sources .csv, and a ZIP—also mirror to Canvas",
+    "Draft a Formal Acquisition Plan (value ≥ thresholds). Infer missing fields from my files, prompt me only for blanks, and backstop with SAM/FPDS. Deliver files + ZIP.",
+    "Write the Risks & Mitigations (tech/cost/schedule/performance) section specific to this requirement; integrate into the template with tables.",
+    "Build the Milestone Schedule.xlsx from FAR/DFARS events and my target dates; include approval gates and source selection timing."
+  ]
+}

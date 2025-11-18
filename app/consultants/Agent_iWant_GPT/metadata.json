@@ -1,7 +1,7 @@
 {
   "key": "agent_iwant_gpt",
   "display_name": "Agent iWant",
-  "instruction_file": "instruction.txt",
+  "instruction_file": "instructions.txt",
   "model_try": ["gpt-5", "gpt-4.1"],
   "summary": "Specializes in PSC/NAICS alignment, acquisition triage, and procurement research guidance.",
   "tools": [

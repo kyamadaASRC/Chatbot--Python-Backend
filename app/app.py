@@ -18,6 +18,7 @@ from app.consultants import (
     CONSULTANTS,
     list_consultants,
     get_consultant_overview,
+    _extract_id,
 )
 from app.openai_client import client
 

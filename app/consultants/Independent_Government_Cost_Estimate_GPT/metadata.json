@@ -1,0 +1,17 @@
+{
+  "key": "independent_government_cost_estimate_gpt",
+  "display_name": "Independent Government Cost Estimate GPT",
+  "instruction_file": "instructions.txt",
+  "model_try": ["gpt-5", "gpt-4.1"],
+  "summary": "Compile data to build an Independant Government Cost Estimate",
+  "tools": [
+    {"type": "file_search"},
+    {"type": "web_search_preview"},
+    {"type": "code_interpreter"}
+  ],
+  "aliases": ["Independent government cost Estimate", "IGE", "IGCE"],
+  "keywords": ["cost estimate", "goverment cost"],
+  "conversation_starters" : [
+    "I need an IGE and am attaching the documents I have."
+  ]
+}
