@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
-import shutil
 from docx import Document
 from openpyxl import Workbook
 
@@ -22,11 +21,6 @@ from app.consultants import (
 )
 from app.openai_client import client
 
-
-CONTAINER_ROOT = Path(os.environ.get("CONTAINER_STORAGE", "./artifacts/containers"))
-CONTAINER_ROOT.mkdir(parents=True, exist_ok=True)
-CONTAINERS = {}
-CONTAINER_FILES = {}
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
@@ -404,9 +398,10 @@ def create_app() -> Flask:
                         continue
                     sanitized = dict(tool)
                     if sanitized.get("type") == "code_interpreter":
-                        container_val = sanitized.get("container")
-                        if not (isinstance(container_val, str) and container_val.startswith("cntr")):
-                            continue
+                        if container_id:
+                            sanitized["container"] = container_id
+                        else:
+                            sanitized["container"] = {"type": "auto"}
                     tools.append(sanitized)
 
             if vector_store_id:
@@ -530,46 +525,69 @@ def create_app() -> Flask:
 
     @app.route("/v1/containers", methods=["POST"])
     def create_container_runtime():
-        container_id = str(uuid.uuid4())
-        path = CONTAINER_ROOT / container_id
-        path.mkdir(parents=True, exist_ok=True)
-        CONTAINERS[container_id] = {"id": container_id}
-        return jsonify({"id": container_id})
+        payload = request.get_json(force=True) or {}
+        name = payload.get("name") or f"Session Container - {uuid.uuid4()}"
+        expires_after = payload.get("expires_after")
+        file_ids = payload.get("file_ids")
+        kwargs: Dict[str, Any] = {"name": name}
+        if isinstance(expires_after, dict):
+            kwargs["expires_after"] = expires_after
+        if isinstance(file_ids, list) and file_ids:
+            kwargs["file_ids"] = file_ids
+        try:
+            container = client.containers.create(**kwargs) # type: ignore
+            return jsonify(_serialize(container))
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/v1/containers/<container_id>", methods=["DELETE"])
     def delete_container_runtime(container_id):
-        CONTAINERS.pop(container_id, None)
-        CONTAINER_FILES.pop(container_id, None)
-        path = CONTAINER_ROOT / container_id
-        shutil.rmtree(path, ignore_errors=True)
-        return jsonify({"id": container_id, "deleted": True})
+        try:
+            res = client.containers.delete(container_id) # type: ignore
+            data = _serialize(res) if res else {"id": container_id, "deleted": True}
+            return jsonify(data)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/v1/containers/<container_id>/files", methods=["POST"])
     def upload_container_file(container_id):
-        if "file" not in request.files:
-            return jsonify({"error": "file is required"}), 400
-        path = CONTAINER_ROOT / container_id
-        if not path.exists():
-            return jsonify({"error": "container not found"}), 404
-        file = request.files["file"]
-        file_id = str(uuid.uuid4())
-        safe_name = file.filename or "upload.bin"
-        dest = path / f"{file_id}_{safe_name}"
-        file.save(dest)
-        files_map = CONTAINER_FILES.setdefault(container_id, {})
-        files_map[file_id] = str(dest)
-        return jsonify({"id": file_id, "name": safe_name})
+        if not container_id:
+            return jsonify({"error": "container_id is required"}), 400
+        if request.files:
+            file = request.files.get("file")
+            if not file:
+                return jsonify({"error": "file is required"}), 400
+            file_tuple = (file.filename, file.stream, file.mimetype or "application/octet-stream")
+            try:
+                uploaded = client.containers.files.create( # type: ignore
+                    container_id=container_id,
+                    file=file_tuple,
+                )
+                return jsonify(_serialize(uploaded))
+            except Exception as exc:
+                return jsonify({"error": str(exc)}), 500
+        payload = request.get_json(force=True) or {}
+        file_id = payload.get("file_id")
+        if not file_id:
+            return jsonify({"error": "file or file_id is required"}), 400
+        try:
+            uploaded = client.containers.files.create( # type: ignore
+                container_id=container_id,
+                file_id=file_id,
+            )
+            return jsonify(_serialize(uploaded))
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/v1/containers/<container_id>/files/<file_id>", methods=["DELETE"])
     def delete_container_file(container_id, file_id):
-        files_map = CONTAINER_FILES.get(container_id, {})
-        file_path = files_map.pop(file_id, None)
-        if file_path:
-            try:
-                Path(file_path).unlink(missing_ok=True)
-            except OSError:
-                pass
-        return jsonify({"id": file_id, "deleted": True})
+        if not container_id or not file_id:
+            return jsonify({"error": "container_id and file_id are required"}), 400
+        try:
+            client.containers.files.delete(file_id=file_id, container_id=container_id) # type: ignore
+            return jsonify({"id": file_id, "deleted": True})
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
 
     @app.route("/v1/responses", methods=["POST"])
     def create_response():

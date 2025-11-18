@@ -34,6 +34,7 @@ const chatClient = new ChatClient(api_key, model, sessionManager);
 // Expose for modules that rely on globals
 window.sessionManager = sessionManager;
 window.fileManager = fileManager;
+window.current_container_id = null;
 const sidebar            = document.getElementById("sidebar");
 const logo               = document.getElementById("logo");
 const chatHistory        = document.getElementById("chat-history");
@@ -195,7 +196,7 @@ async function handleToolCallsIfAny(data) {
 async function createAndMountSession(name = "New Chat") {
     const progressToast = showToast("🧠 Initializing... ", "info", 0);
 
-  // 1) create session data (in-memory) + vector store and container for coude execution
+  // 1) create session data (in-memory) + vector store
   const session = await sessionManager.createSession?.(name);
   const sessionId = session?.id || crypto.randomUUID();
 
@@ -347,7 +348,9 @@ chatSessionList.addEventListener("click", async (e) => {
           for (const file of files) {
             try {
               await fileManager.deleteFile(file.id);
-              await fileManager.deleteContainerFile(containerId, file.id);
+              if (containerId && file.container_file_id) {
+                await fileManager.deleteContainerFile(containerId, file.container_file_id);
+              }
             } catch (err) {
               console.warn("File delete failed:", file.id, err);
             }
@@ -355,7 +358,7 @@ chatSessionList.addEventListener("click", async (e) => {
       // Delete vector store
           if (vectorId) await sessionManager.deleteVectorStore(vectorId);
       // Delete container
-          if (containerId) await sessionManager.deleteContainer(containerId)
+          if (containerId) await sessionManager.deleteContainer(containerId);
     } catch (err) {
       console.error("Session cleanup error:", err);
     }
@@ -369,6 +372,8 @@ chatSessionList.addEventListener("click", async (e) => {
       window.current_session_id = current_session_id;
       current_vector_store_id = null;
       window.current_vector_store_id = current_vector_store_id;
+      current_container_id = null;
+      window.current_container_id = current_container_id;
       chatHistory.innerHTML = "";
       uploadedFilesList && (uploadedFilesList.innerHTML = "");
       const newDiv = await createAndMountSession("New Chat");
@@ -396,6 +401,8 @@ chatSessionList.addEventListener("click", async (e) => {
     window.current_session_id = current_session_id;
     current_vector_store_id = sessionDiv.getAttribute("vector_store_id") || data?.vector_store_id || null;
     window.current_vector_store_id = current_vector_store_id;
+    current_container_id = sessionDiv.getAttribute("container_id") || data?.container_id || null;
+    window.current_container_id = current_container_id;
 
     // Render history + files
     chatHistory.innerHTML = "";

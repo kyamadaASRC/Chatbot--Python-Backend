@@ -34,6 +34,7 @@ export class ChatSessionManager {
         id: session.id,
         name: session.name,
         vector_store_id: session.vector_store_id,
+        container_id: session.container_id || null,
         files: session.files || [],
         messages: session.history || []
     };
@@ -93,6 +94,7 @@ export class ChatSessionManager {
         this.currentSessionId = id;
         window.current_session_id = id;
         window.current_vector_store_id = vector?.id || null;
+        window.current_container_id = null;
         localStorage.setItem(`session_${id}`, JSON.stringify(session));
 
         return session;
@@ -153,7 +155,7 @@ export class ChatSessionManager {
         return this.getCurrentSession()?.vector_store_id || null;
     }
 
-    // Create a new container runtime for code execution
+    // Create a new container runtime via backend/OpenAI
     async createContainer() {
         try {
             const res = await fetch(apiUrl("/v1/containers"), {
@@ -171,9 +173,9 @@ export class ChatSessionManager {
                 throw new Error(err?.error?.message || res.statusText);
             }
 
-            const con = await res.json();
-            console.log("[Container] Created:", con.id);
-            return con; 
+            const container = await res.json();
+            console.log("[Container] Created:", container.id);
+            return container;
         } catch (err) {
             console.error("❌ Failed to create container:", err);
             return null;
@@ -182,49 +184,49 @@ export class ChatSessionManager {
 
     // Lazily create container if needed
     async ensureContainer() {
-        const s = this.getCurrentSession();
-        if (s?.container_id) return s.container_id;
-        
-        const con = await this.createContainer();
-        const id = con?.id || null;
-        if (id) {
-            if (s) {
-                s.container_id = id;
-                this.saveSessionsToLocal?.();
-            } else {
-                console.warn("[Container] No active session when creating container — skipping session assignment.");
+        const session = this.getCurrentSession();
+        if (session?.container_id) return session.container_id;
 
+        const container = await this.createContainer();
+        const id = container?.id || null;
+        if (id) {
+            if (session) {
+                session.container_id = id;
+                this.saveSessionsToLocal?.();
             }
             window.current_container_id = id;
+            try {
+                const sessionEl = document.querySelector(`.chat-session-item[sessionID=\"${session?.id}\"]`);
+                if (sessionEl) sessionEl.setAttribute("container_id", id);
+            } catch {}
         }
         return id;
     }
 
-    // Delete an existing container
     async deleteContainer(containerId) {
         if (!containerId) return null;
         try {
             const res = await fetch(apiUrl(`/v1/containers/${containerId}`), {
-            method: "DELETE",
-            headers: {
-                "Content-Type": "application/json",
-            },
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
             });
-            // Some APIs return 204, some return JSON
-            let data = null;
-            try { data = await res.json(); } catch {}
-            console.log("[Container] Deleted:", containerId, data || res.status);
-            // Clear current session’s ref if it matches
-            const s = this.getCurrentSession();
-            if (s && s.container_id === containerId) {
-                s.container_id = null;
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error?.message || res.statusText);
+            }
+            const data = await res.json().catch(() => null);
+            const session = this.getCurrentSession();
+            if (session && session.container_id === containerId) {
+                session.container_id = null;
                 window.current_container_id = null;
                 this.saveSessionsToLocal?.();
             }
-            return { ok: true, data };
+            return data;
         } catch (err) {
             console.warn("❌ Failed to delete container:", err);
-            return { ok: false, error: err?.message || String(err) };
+            return null;
         }
     }
 

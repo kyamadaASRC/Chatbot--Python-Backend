@@ -9,12 +9,12 @@ This guide orients new contributors to the intern-facing chatbot stack. It expla
 - **Backend** – `app/app.py` exposes a Flask API that proxies all chat traffic to the OpenAI Responses API, optionally routing requests through a “consultant” persona with its own instructions, tools, and resource files (`app/app.py:20-200`).
 - **Consultant registry** – `app/consultants.py` discovers consultant directories, uploads their reference files into OpenAI vector stores, and knows how to invoke them on demand (`app/consultants.py:12-335`).
 - **Frontend** – `app/templates/chatbot.html` + ES modules under `app/static/` render the chat UI, manage local sessions, create vector stores/containers, and talk to the Flask API.
-- **Stateful resources** – Uploaded customer files live both in OpenAI file storage (for retrieval) and in per-session containers under `artifacts/containers/` so code-interpreter runs can access them.
+- **Stateful resources** – Uploaded customer files live in OpenAI file storage and are linked to both the active session’s vector store and its code-interpreter container when runtime access is needed.
 
 Data flow:
 
 1. User enters a prompt in the browser (`main.js`).
-2. The client ensures a chat session, vector store, and optional container exist (`chatSession.js`).
+2. The client ensures a chat session, vector store, and (on demand) a code-interpreter container exist (`chatSession.js`).
 3. `/chat` receives the message, auto-selects an appropriate consultant (if keywords match) or falls back to a general chat model, then calls OpenAI (`app/app.py:163-205`).
 4. The browser renders the assistant response, handles tool calls such as `generate_pdf`, and updates session history (`main.js`, `chatClient.js`).
 
@@ -24,7 +24,7 @@ Data flow:
 
 | Path | Purpose |
 | --- | --- |
-| `app/app.py` | Flask routes for chat, consultant metadata, vector stores, files, containers, and response proxying. |
+| `app/app.py` | Flask routes for chat, consultant metadata, vector stores, containers, files, and response proxying. |
 | `app/openai_client.py` | Loads `.env`, instantiates the shared `OpenAI` client (`app/openai_client.py:7-36`). |
 | `app/consultants.py` | Discovers consultants, uploads their artifacts, and runs consultant-specific responses. |
 | `app/consultants/<Consultant>` | Each consultant’s `metadata.json`, `instruction.txt`, and optional resource files. |
@@ -32,7 +32,6 @@ Data flow:
 | `app/static/js/main.js` | Entry point that wires DOM events to the session, chat, and file managers. |
 | `app/static/modules/*.js` | Modularized browser logic (`chatClient`, `chatSession`, `fileManager`, `ui`, `utils`). |
 | `app/scripts/register_consultant_assests.py` | CLI helper to bulk-upload consultant resources to OpenAI files/vector stores. |
-| `artifacts/containers/` | Runtime scratch space for per-session code-interpreter containers (configurable via `CONTAINER_STORAGE`). |
 | `requirements.txt` | Locked list of Python packages needed to run the Flask backend. |
 | `.env.example` | Template for required environment variables (`OPENAI_API_KEY`, optional overrides). |
 
@@ -93,7 +92,7 @@ Data flow:
    - Serve `app/templates/chatbot.html` through your IDE’s live server (ensure it points to the Flask backend).
 
 3. **Smoke test**
-   - Click “New Chat”; watch the dev console for vector store + container creation logs from `chatSession.js`.
+   - Click “New Chat”; watch the dev console for session + vector store creation logs from `chatSession.js`.
    - Send a simple question; confirm `/chat` returns `mode: "direct"` or `mode: "consultant"` depending on keywords.
    - Upload a file and ensure a toast confirms OpenAI + vector store linkage.
 
@@ -104,7 +103,6 @@ Data flow:
 ### 5.1 Application factory
 
 - `create_app()` wires all routes and helpers (`app/app.py:43-205`).
-- `CONTAINER_ROOT` determines where uploaded container files live (`app/app.py:20-24`).
 - `CHAT_MODEL` and `GENERAL_CHAT_SYSTEM` define the fallback assistant persona for direct chats (`app/app.py:25-31`).
 
 ### 5.2 Chat routing
@@ -122,7 +120,6 @@ Data flow:
 | `GET /v1/consultants` | Returns consultant metadata plus the contents of `app/consultants/overview.md` so the UI can summarize available specialists. |
 | Vector stores (`POST/DELETE /v1/vector_stores*`) | Create/delete stores via OpenAI SDK. |
 | Files (`GET/POST/DELETE /v1/files*`) | Proxy OpenAI file APIs including content download. |
-| Containers (`POST/DELETE /v1/containers*` + `/files`) | Manage lightweight “code interpreter” storage on disk. |
 | `POST /v1/responses` | Transparent pass-through to OpenAI Responses for UI utilities (e.g., auto session naming). |
 
 ### 5.4 OpenAI client bootstrap
@@ -130,12 +127,13 @@ Data flow:
 - `app/openai_client.py` loads `.env`, warns when keys are missing, and exposes the shared `client` (`app/openai_client.py:7-36`).
 - Every backend module imports this singleton, so updating authentication or proxies only needs to happen once here.
 
-### 5.5 Container + file hygiene
+### 5.5 Container runtime
 
-- Uploads to `/v1/containers/<id>/files` are stored under `CONTAINER_ROOT` and tracked in `CONTAINER_FILES` for deletion (`app/app.py:214-271`).
-- Always pair container/file cleanup with UI teardown to avoid leaked disk usage (see `FileManager.deleteFile()` and `ChatSessionManager.deleteContainer()`).
-
----
+- `/v1/containers` maps to `client.containers.create(...)`, giving each chat session its own code-interpreter workspace.
+- `/v1/containers/<id>/files` either uploads raw bytes (multipart) or copies an uploaded OpenAI File into the container so the runtime can read it.
+- `/v1/containers/<id>/files/<file_id>` deletes container artifacts when users remove uploads or entire sessions.
+- `ChatSessionManager.ensureContainer()` lazily provisions a container; `FileManager` mirrors analysis files into it and tracks `container_file_id` so deletions stay in sync.
+- Delete containers alongside vector stores during session cleanup to prevent lingering OpenAI resources (see `main.js` + `chatSession.js`).
 
 ## 6. Consultant Registry & Workflow
 
@@ -151,7 +149,7 @@ Data flow:
 
 ### 6.3 Execution
 
-- `run_consultant_response()` merges consultant-defined tools (file search, web search, code interpreter) with the active session’s vector store/container before calling `client.responses.create()` (`app/consultants.py:269-335`).
+- `run_consultant_response()` merges consultant-defined tools (file search, web search, code interpreter) with the active session’s vector store and container before calling `client.responses.create()` (`app/consultants.py:269-335`).
 - Failover is built-in: the method iterates through `model_try` until one succeeds.
 
 ### 6.4 Adding a consultant
@@ -176,30 +174,30 @@ Data flow:
 | Module | Highlights |
 | --- | --- |
 | `static/js/main.js` | Creates managers, wires DOM events, handles send/stop button state, manages scrolling, and processes tool calls like `generate_pdf`. |
-| `static/modules/chatSession.js` | Keeps per-session metadata, persists to `localStorage`, creates vector stores and containers via backend endpoints, and renames sessions using `/v1/responses` (`chatSession.js:75-226`, `chatSession.js:246-374`). |
-| `static/modules/chatClient.js` | Builds the payload for `/chat`, ensures vector store/container IDs exist, defines the `generate_pdf`, `web_search_preview`, and `code_interpreter` tools, and records returned messages (`chatClient.js:12-181`). |
-| `static/modules/fileManager.js` | Handles drag/drop + input uploads, pushes files to OpenAI, links them to the session’s vector store, mirrors them into containers for analysis, ingests model-generated artifacts (e.g., PDFs from `generate_pdf`), and deletes both OpenAI + container copies (`fileManager.js`). |
+| `static/modules/chatSession.js` | Keeps per-session metadata, persists to `localStorage`, provisions vector stores and containers via backend endpoints, and renames sessions using `/v1/responses` (`chatSession.js:75-226`, `chatSession.js:246-374`). |
+| `static/modules/chatClient.js` | Builds the payload for `/chat`, ensures vector store + container IDs exist, defines the `generate_pdf`, `web_search_preview`, and `code_interpreter` tools, and records returned messages (`chatClient.js:12-181`). |
+| `static/modules/fileManager.js` | Handles drag/drop + input uploads, pushes files to OpenAI, mirrors analysis files into the session’s container, links everything to the vector store, ingests model-generated artifacts, and cleans up OpenAI copies on delete (`fileManager.js`). |
 | `static/modules/ui.js` | Renders messages, session list items, spinners, and toast notifications with Markdown sanitization and syntax highlighting. |
 | `static/modules/utils.js` | Provides `fetchWithDiagnostics`, Markdown → PDF helpers, and sanitization utilities so tool calls can drop downloadable artifacts into the transcript. |
 
 ### 7.3 Message lifecycle
 
 1. User submits a prompt → `main.js` disables inputs, renders the user bubble, and calls `chatClient.sendMessage()`.
-2. `ChatClient` fetches `/chat` with the session’s `vector_store_id` + `container_id`.
+2. `ChatClient` fetches `/chat` with the session’s `vector_store_id` and `container_id`.
 3. The backend either routes to a consultant or to the general assistant and returns JSON describing the response/tool stream.
 4. `main.js` renders the assistant text, inspects `output` for tool calls (e.g., `generate_pdf`), invokes utilities, and, when a PDF blob is returned, hands it to `FileManager` so it’s uploaded/linked automatically.
 5. `ChatSessionManager` updates local history and triggers auto title summarization through `/v1/responses`.
 
 ---
 
-## 8. Files, Vector Stores, and Containers
+## 8. Files, Vector Stores & Containers
 
 - **Vector stores** – Each session calls `POST /v1/vector_stores` on creation (`chatSession.js:75-99`) so file search has isolated context. Store IDs are cached on the session object and reused for future uploads.
 - **File uploads** – `FileManager.uploadFile()` sends files to `/v1/files` → OpenAI file storage, links them back via `/v1/vector_stores/{id}/files`, and keeps DOM metadata (`fileManager.js`). Vision files optionally trigger caption generation for better retrieval.
 - **Generated artifacts** – When the Responses API returns `output_file_ids` (from consultants or the default assistant), the backend links them to the active session vector store and the frontend calls `fileManager.addGeneratedFiles()` so they appear in the Files list. PDF blobs created locally via `generate_pdf` are also ingested and uploaded automatically, with their preview/download links backed by the local object URL.
 - **Server-generated DOCX/XLSX** – Models can call the `generate_docx` and `generate_xlsx` function tools. The Flask backend uses `python-docx` and `openpyxl` to build the documents, uploads them to OpenAI Files, links them into the session’s vector store, and returns metadata so the Files sidebar updates immediately.
-- **Containers** – Long-running analysis (CSV, XLSX, etc.) optionally spins up a local container via `POST /v1/containers` and mirrors relevant files there so `code_interpreter` has read/write access (`chatSession.js:150-222`, `fileManager.js:155-210`).
-- **Cleanup** – Deleting a chat session should cascade through `ChatSessionManager.deleteVectorStore()` and `deleteContainer()`; deleting an individual file removes it from OpenAI plus the container, then purges DOM metadata (`fileManager.js:212-302`).
+- **Containers** – `ChatSessionManager.ensureContainer()` calls `/v1/containers` only when needed; `FileManager` mirrors CSV/Excel-style uploads via `/v1/containers/<id>/files` so code interpreter can read them, and deletions remove both OpenAI Files and container copies.
+- **Cleanup** – Deleting a chat session should cascade through `ChatSessionManager.deleteVectorStore()` and `deleteContainer()`; deleting an individual file removes it from OpenAI, then from the container if present, before purging DOM metadata (`fileManager.js:212-302`).
 
 ---
 
@@ -208,7 +206,6 @@ Data flow:
 - **Missing API key** – Backend will log “⚠️ WARNING: OPENAI_API_KEY not found” on startup (`app/openai_client.py:25-36`). Ensure `.env` is accessible from the working directory.
 - **Vector store churn** – If consultant resources change frequently, clear `app/consultants/vector_store_cache.json` to force re-upload on next boot.
 - **File preview issues** – Most previews rely on `URL.createObjectURL`. If you refresh the page, revoke stale blob URLs or re-upload.
-- **Container cleanup** – Stuck files under `artifacts/containers/*` mean containers were never deleted. Use `DELETE /v1/containers/<id>` or remove the directory manually once you confirm nothing relies on it.
 - **Cross-origin requests** – When serving the UI externally (e.g., VS Code Live Server), keep it on `127.0.0.1:5501` or update the `CORS` config near the bottom of `app/app.py`.
 - **PDF generation errors** – `renderMarkdownPDFDownload()` depends on pdfmake/html-to-pdfmake/jsPDF scripts loaded in the template. If those CDNs fail, the fallback will still attempt jsPDF but logs warnings in the console (`static/modules/utils.js:34-163`).
 
@@ -227,7 +224,7 @@ Data flow:
    - `main.js` is intentionally modular; add new panels or status chips by extending the DOM helpers in `ui.js`.
 
 4. **Deployment**
-   - Wrap the app with Gunicorn or another WSGI server. Remember to provision persistent storage for `artifacts/containers` if you rely on code interpreter.
+   - Wrap the app with Gunicorn or another WSGI server. Ensure the `artifacts/` directory (used for generated files/vector-store caches) lives on persistent storage if you scale beyond a single instance.
 
 5. **Testing ideas**
    - Mock OpenAI by swapping `app/openai_client.client` with a fake during unit tests.

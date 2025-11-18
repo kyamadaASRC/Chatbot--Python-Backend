@@ -39,9 +39,10 @@ export class FileManager {
   }
 
   async deleteContainerFile(containerId, containerFileId) {
+    if (!containerId || !containerFileId) return null;
     return await fetchWithDiagnostics(apiUrl(`/v1/containers/${containerId}/files/${containerFileId}`), {
-        method: "DELETE",
-    })
+      method: "DELETE",
+    });
   }
 
   async linkFileToVectorStore(fileId, vectorStoreId) {
@@ -456,7 +457,7 @@ uploadedFileList?.addEventListener("click", async (e) => {
     window.current_container_id ||
     window.sessionManager?.getCurrentSession?.()?.container_id;
    
-  // 🔍 Find matching file record in session to get container_file_id
+  // 🔍 Find matching file record in session
   let fileRecord = session?.files?.find(
     (f) => f.openai_file_id === fileId || f.id === fileId
   );
@@ -552,19 +553,14 @@ uploadedFileList?.addEventListener("click", async (e) => {
         // 1️⃣ Delete from /v1/files
         await window.fileManager.deleteFile(fileId);
 
-        console.log("DEBUG Delete context:", {
-            fileId,
-            containerId,
-            sessionFiles: session?.files,
-            fileRecord,
-            containerFileId
-        });
-        // 2️⃣ Delete from container if one exists
+        // 2️⃣ Delete from container if available
         if (containerId && containerFileId) {
+          try {
             await window.fileManager.deleteContainerFile(containerId, containerFileId);
             console.log(`[Container] Deleted file ${containerFileId} from container ${containerId}`);
-        } else {
-            console.log(`[Container] Skipped container delete (no container found)`);
+          } catch (err) {
+            console.warn("Failed to delete container file:", err);
+          }
         }
 
         // 3️⃣ Remove from session + UI

@@ -115,7 +115,8 @@ def _extract_id(obj: Any) -> Optional[str]:
     return None
 
 
-def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> None:
+def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> List[Dict[str, str]]:
+    uploaded: List[Dict[str, str]] = []
     for filepath in files:
         path = Path(filepath)
         if not path.exists():
@@ -130,6 +131,8 @@ def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> None:
         if not file_id:
             raise RuntimeError(f"Failed to upload file {filepath}: missing id")
         client.vector_stores.files.create(vector_store_id=vs_id, file_id=file_id)
+        uploaded.append({"path": str(path), "file_id": file_id})
+    return uploaded
 
 
 def _create_vector_store_for(display_name: str, key: str) -> str:
@@ -160,13 +163,19 @@ def _initialize_vector_stores(registry: Dict[str, Dict[str, Any]]) -> None:
             and _vector_store_exists(cached_vs)
         ):
             meta["vector_store_id"] = cached_vs
+            meta["uploaded_files"] = cached.get("uploaded_files", [])
             continue
 
         print(f"[consultants] Creating vector store for {key} with {len(local_files)} files…")
         vs_id = _create_vector_store_for(meta.get("display_name", key), key)
-        _upload_files_to_vector_store(vs_id, local_files)
+        uploaded_records = _upload_files_to_vector_store(vs_id, local_files)
         meta["vector_store_id"] = vs_id
-        cache[key] = {"vector_store_id": vs_id, "file_signature": current_signature}
+        meta["uploaded_files"] = uploaded_records
+        cache[key] = {
+            "vector_store_id": vs_id,
+            "file_signature": current_signature,
+            "uploaded_files": uploaded_records,
+        }
         updated = True
 
     if updated:
@@ -214,6 +223,7 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
             "aliases": sorted(alias_candidates),
             "keywords": [kw.lower() for kw in metadata.get("keywords", []) if isinstance(kw, str)],
             "vector_store_id": metadata.get("vector_store_id"),
+            "uploaded_files": [],
         }
     return registry
 
@@ -309,10 +319,11 @@ def run_consultant_response(
             if not ids:
                 continue
             t["vector_store_ids"] = ids
-        if tool_type == "code_interpreter" and not container_id:
-            continue
-        if tool_type == "code_interpreter" and container_id:
-            t["container"] = container_id
+        if tool_type == "code_interpreter":
+            if container_id:
+                t["container"] = container_id
+            else:
+                t["container"] = {"type": "auto"}
         request_tools.append(t)
 
     last_err: Optional[Exception] = None

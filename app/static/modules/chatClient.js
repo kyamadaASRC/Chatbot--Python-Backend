@@ -55,20 +55,12 @@ export class ChatClient {
         console.warn("Could not create vector store on-demand:", e);
       }
     }
-    // Ensure we have a container; create one on-demand
+
+    // Ensure we have a container for code interpreter when needed
     let containerId = window.current_container_id;
-    if (!containerId && this.sessionManager?.createContainer) {
+    if (!containerId && this.sessionManager?.ensureContainer) {
       try {
-        const con = await this.sessionManager.createContainer();
-        containerId = con?.id || null;
-        if (containerId) {
-          const s = this.sessionManager.getCurrentSession?.();
-          if (s) {
-            s.container_id = containerId;
-            this.sessionManager.saveSessionsToLocal?.();
-          }
-          window.current_container_id = containerId;
-        }
+        containerId = await this.sessionManager.ensureContainer();
       } catch (e) {
         console.warn("Could not create container on-demand:", e);
       }
@@ -151,12 +143,13 @@ export class ChatClient {
     });
 
     tools.push({ type: "web_search_preview" });
-    if (containerId && /^cntr/.test(containerId)) {
-      tools.push({
-        type: "code_interpreter",
-        container: containerId,
-      });
+    const codeInterpreterTool = { type: "code_interpreter" };
+    if (containerId) {
+      codeInterpreterTool.container = containerId;
+    } else {
+      codeInterpreterTool.container = { type: "auto" };
     }
+    tools.push(codeInterpreterTool);
 
     const payload = {
       model: this.model,
