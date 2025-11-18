@@ -45,6 +45,7 @@ const editField          = document.getElementById("edit-field");
 const sendStopButton     = document.getElementById("send-stop-button");
 const scrollDownBtn      = document.getElementById("scroll-down-btn");
 const uploadedFilesList  = document.getElementById("uploaded-file-list");
+const starterPanel       = document.getElementById("starter-panel");
 const assetPaths = window.STATIC_ASSETS || {};
 const systemPrompt = `You are a helpful assistant. You can use the tool 'generate_pdf' to create downloadable PDFs.
          When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown).
@@ -64,6 +65,97 @@ let current_session_id = null;
 let current_vector_store_id = null;
 let current_container_id = null;
 let existingSessions = [];
+const consultantStarters = new Map();
+let shownStarterConsultants = new Set();
+
+async function loadConsultantMetadata() {
+  try {
+    const res = await fetch("/v1/consultants");
+    if (!res.ok) return;
+    const data = await res.json().catch(() => ({}));
+    (data.consultants || []).forEach((item) => {
+      if (!item?.key) return;
+      const starters = Array.isArray(item.conversation_starters)
+        ? item.conversation_starters.filter((s) => typeof s === "string" && s.trim())
+        : [];
+      consultantStarters.set(item.key, starters);
+    });
+  } catch (err) {
+    console.warn("Failed to load consultant metadata:", err);
+  }
+}
+
+// Shape the recent chat history into the payload the backend router expects.
+function buildRouterHistoryPayload(history = [], limit = 6) {
+  if (!Array.isArray(history)) return [];
+  const trimmed = history
+    .filter((entry) => entry && (entry.role === "user" || entry.role === "assistant"))
+    .slice(-limit);
+  return trimmed.map((entry) => ({
+    role: entry.role,
+    content: String(entry.content || "").slice(0, 600),
+  }));
+}
+
+// Swap the text inside a spinner toast while keeping the animation running.
+function updateSpinnerToast(toastEl, message) {
+  if (!toastEl) return;
+  toastEl.innerHTML = `<span class="spinner" style="margin-right:8px"><div class="dot"></div><div class="dot"></div><div class="dot"></div></span>${message}`;
+}
+
+// Ping /v1/router/preview so we can inform the user what is about to happen.
+async function previewRouterDecision(message) {
+  if (!message) return { decision: null, consultants: [], toasts: [] };
+  const routingToast = showSpinnerToast("Routing your request…");
+  const handles = [routingToast];
+  try {
+    const historyPayload = buildRouterHistoryPayload(sessionManager.getHistory() || []);
+    const res = await fetch("/v1/router/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, history: historyPayload }),
+    });
+    if (!res.ok) {
+      throw new Error(`Router preview failed (${res.status})`);
+    }
+    const data = await res.json().catch(() => ({}));
+    const decision = data?.decision || null;
+    const consultants = Array.isArray(data?.consultants) ? data.consultants : [];
+    if (decision?.mode === "single" && consultants.length) {
+      updateSpinnerToast(routingToast, `Calling ${consultants[0].display_name || "consultant"}…`);
+    } else if (decision?.mode === "parallel") {
+      const count = consultants.length || 2;
+      updateSpinnerToast(routingToast, `Engaging ${count} consultant${count === 1 ? "" : "s"}…`);
+      const summaryToast = showSpinnerToast("Summarizing consultant results…");
+      handles.push(summaryToast);
+    } else {
+      updateSpinnerToast(routingToast, "Using general assistant…");
+    }
+    return { decision, consultants, toasts: handles };
+  } catch (err) {
+    console.warn("Router preview failed:", err);
+    handles.forEach((toast) => dismissToast(toast));
+    return { decision: null, consultants: [], toasts: [] };
+  }
+}
+
+function dismissProgressToasts(handles = []) {
+  handles.forEach((toast) => dismissToast(toast));
+}
+
+// Translate response/router metadata into human-friendly toast summaries.
+function announceRouterCompletion(response, previewMeta) {
+  if (!response) return;
+  if (response.mode === "parallel") {
+    const count = Array.isArray(response.consultants) ? response.consultants.length : (previewMeta?.consultants?.length || 2);
+    showToast(`Summary ready from ${count} consultant${count === 1 ? "" : "s"}.`, "success", 2600);
+  } else if (response.mode === "consultant") {
+    const name = response.consultant_display || previewMeta?.consultants?.[0]?.display_name || "Consultant";
+    showToast(`${name} finished responding.`, "success", 2200);
+  } else if (previewMeta?.decision?.mode === "direct") {
+    showToast("General assistant response ready.", "success", 1800);
+  }
+}
 
 
 
@@ -193,6 +285,38 @@ async function handleToolCallsIfAny(data) {
 
 
 // Initialize on refresh
+function clearStarterPanel(force = false) {
+  if (!starterPanel) return;
+  if (force || !starterPanel.children.length) {
+    starterPanel.innerHTML = "";
+    starterPanel.classList.add("d-none");
+    starterPanel.removeAttribute("data-active-consultant");
+  }
+}
+
+function showStarterChoices(consultantKey) {
+  if (!starterPanel || !consultantKey) return;
+  if (shownStarterConsultants.has(consultantKey)) return;
+  const starters = consultantStarters.get(consultantKey) || [];
+  if (!starters.length) return;
+  starterPanel.innerHTML = "";
+  starters.forEach((text) => {
+    if (!text || typeof text !== "string") return;
+    const chip = document.createElement("div");
+    chip.className = "starter-chip";
+    chip.textContent = text;
+    chip.addEventListener("click", () => {
+      editField.value = text;
+      editField.focus();
+      clearStarterPanel(true);
+    });
+    starterPanel.appendChild(chip);
+  });
+  starterPanel.classList.remove("d-none");
+  starterPanel.dataset.activeConsultant = consultantKey;
+  shownStarterConsultants.add(consultantKey);
+}
+
 async function createAndMountSession(name = "New Chat") {
     const progressToast = showToast("🧠 Initializing... ", "info", 0);
 
@@ -226,6 +350,8 @@ async function createAndMountSession(name = "New Chat") {
   window.current_vector_store_id = current_vector_store_id;
   current_container_id = session.container_id || null;
   window.current_container_id = current_container_id;
+  shownStarterConsultants = new Set();
+  clearStarterPanel(true);
 
   // 4) clear chat view & show system line
   chatHistory.innerHTML = "";
@@ -403,6 +529,7 @@ chatSessionList.addEventListener("click", async (e) => {
     window.current_vector_store_id = current_vector_store_id;
     current_container_id = sessionDiv.getAttribute("container_id") || data?.container_id || null;
     window.current_container_id = current_container_id;
+    clearStarterPanel(true);
 
     // Render history + files
     chatHistory.innerHTML = "";
@@ -525,16 +652,22 @@ scrollDownBtn?.addEventListener("click", () => {
   editField.value = "";
   const spinner = renderSpinner();
 
+  let routerPreview = null;
   try {
     abortController = new AbortController();
     isGenerating = true;
     setInputDisabled(true);
+    // Show staged toasts (routing → consultant → summary) before sending /chat.
+    routerPreview = await previewRouterDecision(text);
     const response = await chatClient.sendMessage(
       text,
       false,
       abortController.signal,
-      systemPrompt
+      systemPrompt,
+      routerPreview?.decision || null
     );
+    dismissProgressToasts(routerPreview?.toasts || []);
+    announceRouterCompletion(response, routerPreview);
 
     if (
       window.fileManager?.addGeneratedFiles &&
@@ -556,12 +689,18 @@ scrollDownBtn?.addEventListener("click", () => {
     sessionManager.addMessageToCurrent("assistant", finalText);
     renderAssistantMessage(finalText);
     await handleToolCallsIfAny(response);
+    if (response?.mode === "consultant" && response.consultant) {
+      showStarterChoices(response.consultant);
+    } else {
+      clearStarterPanel();
+    }
     await sessionManager.updateSessionSummarySafe(text, finalText);
     isGenerating = false;
     setInputDisabled(false);
 
   } catch (err) {
     removeSpinner(spinner);
+    dismissProgressToasts(routerPreview?.toasts || []);
     console.error("OpenAI error:", err);
     const message = err?.message ? `⚠️ ${err.message}` : "⚠️ Request failed.";
     renderSystemMessage(message);
@@ -601,6 +740,8 @@ async function initialize() {
   // Ensure scroll-down button is managed by class, not inline style
   try { if (scrollDownBtn) scrollDownBtn.style.removeProperty('display'); } catch {}
   
+  await loadConsultantMetadata();
+
   // Create one fresh session
   const div = await createAndMountSession("New Chat");
   activateSessionDiv(div);

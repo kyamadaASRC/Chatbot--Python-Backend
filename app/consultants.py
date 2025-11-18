@@ -213,10 +213,15 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
         }
         alias_candidates.update(alias.strip().lower() for alias in aliases if isinstance(alias, str))
 
+        summary = metadata.get("summary")
+        if not summary:
+            lines = [line.strip() for line in instructions.splitlines() if line.strip()]
+            summary = lines[0] if lines else ""
         registry[key] = {
             "key": key,
             "display_name": display_name,
             "instructions": instructions,
+            "summary": summary,
             "model_try": metadata.get("model_try") or DEFAULT_MODELS,
             "tools": metadata.get("tools") or [{"type": "file_search"}],
             "local_files": local_files,
@@ -224,6 +229,11 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
             "keywords": [kw.lower() for kw in metadata.get("keywords", []) if isinstance(kw, str)],
             "vector_store_id": metadata.get("vector_store_id"),
             "uploaded_files": [],
+            "conversation_starters": [
+                starter
+                for starter in metadata.get("conversation_starters", [])
+                if isinstance(starter, str) and starter.strip()
+            ],
         }
     return registry
 
@@ -277,6 +287,8 @@ def list_consultants() -> List[Dict[str, Any]]:
                 "keywords": meta.get("keywords", []),
                 "local_files": meta.get("local_files", []),
                 "vector_store_id": meta.get("vector_store_id"),
+                "summary": meta.get("summary"),
+                "conversation_starters": meta.get("conversation_starters", []),
             }
         )
     return items

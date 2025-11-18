@@ -4,6 +4,8 @@ import uuid
 import json
 import re
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
@@ -19,6 +21,7 @@ from app.consultants import (
     get_consultant_overview,
     _extract_id,
 )
+from app.consultant_router import route_consultants, RouterDecision, describe_decision
 from app.openai_client import client
 
 
@@ -29,6 +32,11 @@ For spreadsheets or tabular deliverables, call generate_xlsx(sheets=[{name:..., 
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
+PARALLEL_SUMMARY_SYSTEM = """You orchestrate multiple consultant agents. Summarize their findings into a cohesive answer for the acquisition team.
+- Tie recommendations back to the user's question.
+- Highlight conflicts or gaps between consultants.
+- Mention which consultant provided critical insights.
+Respond concisely but cover the major points."""
 CONSULTANT_TOOL_PREFIX = "call_"
 
 
@@ -246,41 +254,18 @@ def create_app() -> Flask:
         return render_template("chatbot.html")
 
 
-    def _needs_any_consultant(message: str) -> bool:
-        msg = (message or "").lower()
-        if "consultant" in msg:
-            return True
-        matches = 0
-        for meta in CONSULTANTS.values():
-            for keyword in meta.get("keywords", []):
-                if keyword and keyword in msg:
-                    matches += 1
-                    if matches >= 2:
-                        return True
-        return False
-
-
-    def _match_consultant_alias(message: str) -> Optional[str]:
-        msg = (message or "").lower()
-        for key, meta in CONSULTANTS.items():
-            for alias in meta.get("aliases", []):
-                if alias and alias in msg:
-                    return key
-            for keyword in meta.get("keywords", []):
-                if keyword and keyword in msg:
-                    return key
-        return None
-
-
-    def _select_consultant(message: str, explicit_key: Optional[str] = None) -> Optional[str]:
-        if explicit_key:
-            return explicit_key if explicit_key in CONSULTANTS else None
-        matched = _match_consultant_alias(message)
-        if matched:
-            return matched
-        if _needs_any_consultant(message):
-            return DEFAULT_CONSULTANT_KEY
-        return None
+    def _log_progress(log: Optional[List[Dict[str, Any]]], stage: str, **extra: Any) -> None:
+        """Append a timestamped breadcrumb so the frontend can reflect pipeline stages."""
+        if log is None:
+            return
+        entry: Dict[str, Any] = {
+            "stage": stage,
+            "timestamp": time.time(),
+        }
+        for key, value in extra.items():
+            if value is not None:
+                entry[key] = value
+        log.append(entry)
 
 
     def _extract_text(resp) -> str:
@@ -309,27 +294,66 @@ def create_app() -> Flask:
         return ""
 
 
-    def _consultant_tool_call(
+    def _invoke_consultant_run(
         message: str,
         project: str,
         vector_store_id: Optional[str],
         container_id: Optional[str],
         consultant_key: str,
-    ):
+    ) -> Dict[str, Any]:
+        """Execute a single consultant and normalize its response for downstream consumers."""
+        started = time.time()
         result = run_consultant_response(
             message,
             vector_store_id=vector_store_id,
             container_id=container_id,
             consultant_key=consultant_key,
         )
-        text = (result.get("text") or "").strip()
-        if not text:
-            text = "The consultant returned no notes."
+        text = (result.get("text") or "").strip() or "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
         response_payload = result.get("response_payload") or {}
         generated_files = _process_server_tool_calls(response_payload, vector_store_id)
         generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
         meta = CONSULTANTS.get(consultant_key, {})
+        return {
+            "question": message,
+            "project": project,
+            "consultant": result.get("consultant", consultant_key),
+            "display_name": result.get("display_name") or meta.get("display_name", consultant_key),
+            "text": text,
+            "model": result.get("model"),
+            "file_ids": file_ids,
+            "generated_files": generated_files,
+            "resources": meta.get("local_files", []),
+            "response_payload": response_payload,
+            "duration_ms": int((time.time() - started) * 1000),
+        }
+
+
+    def _consultant_tool_call(
+        message: str,
+        project: str,
+        vector_store_id: Optional[str],
+        container_id: Optional[str],
+        consultant_key: str,
+        router_decision: Optional[RouterDecision] = None,
+        progress_log: Optional[List[Dict[str, Any]]] = None,
+    ):
+        """Legacy call path that wraps `_invoke_consultant_run` in the tool-call shim."""
+        run_payload = _invoke_consultant_run(
+            message,
+            project,
+            vector_store_id,
+            container_id,
+            consultant_key,
+        )
+        _log_progress(
+            progress_log,
+            "consultant",
+            consultant=run_payload["consultant"],
+            display_name=run_payload["display_name"],
+            duration_ms=run_payload.get("duration_ms"),
+        )
         tool_args = {
             "question": message,
             "project": project,
@@ -346,19 +370,152 @@ def create_app() -> Flask:
         response_stub = {
             "type": "message",
             "role": "assistant",
-            "content": [{"type": "text", "text": text}],
+            "content": [{"type": "text", "text": run_payload["text"]}],
         }
         return {
-            "text": text,
+            "text": run_payload["text"],
             "mode": "consultant",
             "tool_name": tool_name,
-            "consultant": result.get("consultant", consultant_key),
-            "consultant_display": result.get("display_name") or meta.get("display_name"),
-            "model": result.get("model"),
+            "consultant": run_payload["consultant"],
+            "consultant_display": run_payload["display_name"],
+            "model": run_payload.get("model"),
+            "file_ids": run_payload.get("file_ids"),
+            "generated_files": run_payload.get("generated_files"),
+            "resources": run_payload.get("resources"),
+            "router_decision": router_decision.to_dict() if router_decision else None,
+            "progress_log": progress_log,
+            "output": [call_stub, response_stub],
+        }
+
+
+    def _summarize_consultant_results(
+        message: str,
+        consultant_runs: List[Dict[str, Any]],
+        summary_prompt: Optional[str],
+        vector_store_id: Optional[str],
+    ) -> Dict[str, Any]:
+        """Ask the general chat model to merge multiple consultant notes into one answer."""
+        summary_system = summary_prompt or PARALLEL_SUMMARY_SYSTEM
+        lines = [f"User question:\n{message.strip()}"]
+        for run in consultant_runs:
+            lines.append(
+                f"\nConsultant: {run['display_name']} ({run['consultant']})\nNotes:\n{run.get('text') or 'No notes provided.'}"
+            )
+        compiled = "\n".join(lines)
+        started = time.time()
+        resp = client.responses.create(
+            model=CHAT_MODEL,
+            input=[
+                {"role": "system", "content": summary_system},
+                {"role": "user", "content": compiled},
+            ],
+        )
+        duration_ms = int((time.time() - started) * 1000)
+        serialized = _ensure_dict(resp)
+        text = _extract_text(resp) or "Summary was not generated."
+        file_ids = getattr(resp, "output_file_ids", None) or []
+        generated_files = _process_server_tool_calls(serialized, vector_store_id)
+        generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
+        return {
+            "text": text,
             "file_ids": file_ids,
             "generated_files": generated_files,
-            "resources": meta.get("local_files", []),
-            "output": [call_stub, response_stub],
+            "response": serialized,
+            "duration_ms": duration_ms,
+        }
+
+
+    def _run_parallel_consultants(
+        message: str,
+        project: str,
+        vector_store_id: Optional[str],
+        container_id: Optional[str],
+        consultant_keys: List[str],
+        router_decision: Optional[RouterDecision],
+        progress_log: Optional[List[Dict[str, Any]]],
+    ):
+        """Execute multiple consultants concurrently and merge their answers."""
+        if not consultant_keys:
+            raise ValueError("At least one consultant key is required for parallel execution.")
+
+        runs: List[Dict[str, Any]] = []
+        failures: List[Dict[str, Any]] = []
+        aggregated_files: List[Dict[str, Any]] = []
+
+        with ThreadPoolExecutor(max_workers=min(len(consultant_keys), 4)) as executor:
+            future_map = {
+                executor.submit(
+                    _invoke_consultant_run,
+                    message,
+                    project,
+                    vector_store_id,
+                    container_id,
+                    key,
+                ): key
+                for key in consultant_keys
+            }
+            for future in as_completed(future_map):
+                key = future_map[future]
+                try:
+                    run_payload = future.result()
+                    runs.append(run_payload)
+                    aggregated_files.extend(run_payload.get("generated_files") or [])
+                    _log_progress(
+                        progress_log,
+                        "consultant",
+                        consultant=run_payload["consultant"],
+                        display_name=run_payload["display_name"],
+                        duration_ms=run_payload.get("duration_ms"),
+                    )
+                except Exception as exc:  # pragma: no cover - diagnostic
+                    error_text = str(exc)
+                    failures.append({"consultant": key, "error": error_text})
+                    _log_progress(
+                        progress_log,
+                        "consultant_error",
+                        consultant=key,
+                        error=error_text,
+                    )
+
+        if not runs:
+            raise RuntimeError("All consultant calls failed.")
+
+        summary = _summarize_consultant_results(
+            message,
+            runs,
+            router_decision.summary_prompt if router_decision else None,
+            vector_store_id,
+        )
+        aggregated_files.extend(summary.get("generated_files") or [])
+        _log_progress(
+            progress_log,
+            "summary",
+            duration_ms=summary.get("duration_ms"),
+        )
+        consultant_notes = {run["consultant"]: run.get("text", "") for run in runs}
+        return {
+            "mode": "parallel",
+            "text": summary.get("text"),
+            "summary": summary.get("text"),
+            "consultant_notes": consultant_notes,
+            "consultants": [
+                {
+                    "consultant": run["consultant"],
+                    "display_name": run["display_name"],
+                    "text": run.get("text"),
+                    "model": run.get("model"),
+                    "file_ids": run.get("file_ids"),
+                    "generated_files": run.get("generated_files"),
+                    "resources": run.get("resources"),
+                }
+                for run in runs
+            ],
+            "file_ids": summary.get("file_ids"),
+            "generated_files": aggregated_files,
+            "router_decision": router_decision.to_dict() if router_decision else None,
+            "progress_log": progress_log,
+            "failures": failures,
+            "summary_response": summary.get("response"),
         }
 
     @app.route("/chat", methods=["POST"])
@@ -370,12 +527,41 @@ def create_app() -> Flask:
         container_id = data.get("container_id")
         requested_consultant = data.get("consultant_key")
         incoming_tools = data.get("tools")
+        router_payload = data.get("router_decision")
         if not msg:
             return jsonify({"error": "Missing message"}), 400
 
-        consultant_key = _select_consultant(msg, requested_consultant)
-        if requested_consultant and not consultant_key:
-            return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
+        # Track router + execution steps so the client can show progress indicators.
+        router_decision = None
+        progress_log: List[Dict[str, Any]] = []
+        consultant_key = None
+        if requested_consultant:
+            if requested_consultant not in CONSULTANTS:
+                return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
+            consultant_key = requested_consultant
+        else:
+            # Accept a client-provided router hint, otherwise call the router locally.
+            router_decision = RouterDecision.from_dict(router_payload)
+            if not router_decision:
+                router_decision = route_consultants(msg)
+            _log_progress(progress_log, "router", mode=router_decision.mode)
+            if router_decision.mode == "single":
+                consultant_key = router_decision.primary or DEFAULT_CONSULTANT_KEY
+            elif router_decision.mode == "parallel":
+                keys = router_decision.selected_consultants()
+                try:
+                    payload = _run_parallel_consultants(
+                        msg,
+                        project,
+                        vector_store_id,
+                        container_id,
+                        keys,
+                        router_decision,
+                        progress_log,
+                    )
+                    return jsonify(payload)
+                except Exception as exc:
+                    return jsonify({"error": str(exc)}), 500
 
         if consultant_key:
             try:
@@ -385,6 +571,8 @@ def create_app() -> Flask:
                     vector_store_id,
                     container_id,
                     consultant_key,
+                    router_decision=router_decision,
+                    progress_log=progress_log,
                 )
                 return jsonify(payload)
             except Exception as exc:
@@ -426,6 +614,7 @@ def create_app() -> Flask:
             generated_files = []
             generated_files.extend(_process_server_tool_calls(serialized, vector_store_id))
             generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
+            _log_progress(progress_log, "direct")
             return jsonify({
                 "text": text,
                 "mode": "direct",
@@ -434,6 +623,8 @@ def create_app() -> Flask:
                 "output": serialized.get("output"),
                 "output_text": serialized.get("output_text"),
                 "choices": serialized.get("choices"),
+                "router_decision": router_decision.to_dict() if router_decision else None,
+                "progress_log": progress_log,
             })
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
@@ -444,6 +635,16 @@ def create_app() -> Flask:
             "consultants": list_consultants(),
             "overview": get_consultant_overview(),
         })
+
+    @app.route("/v1/router/preview", methods=["POST"])
+    def router_preview():
+        payload = request.get_json(force=True) or {}
+        message = (payload.get("message") or "").strip()
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+        history = payload.get("history")
+        decision = route_consultants(message, history=history)
+        return jsonify(describe_decision(decision))
 
     @app.route("/v1/vector_stores", methods=["POST"])
     def create_vector_store():

@@ -105,11 +105,13 @@ Data flow:
 - `create_app()` wires all routes and helpers (`app/app.py:43-205`).
 - `CHAT_MODEL` and `GENERAL_CHAT_SYSTEM` define the fallback assistant persona for direct chats (`app/app.py:25-31`).
 
-### 5.2 Chat routing
+### 5.2 Consultant router & parallel orchestration
 
-1. `_select_consultant()` inspects user text + optional `consultant_key` to decide whether to invoke a specialist (`app/app.py:52-87`).
-2. If a consultant is chosen, `_consultant_tool_call()` delegates to `run_consultant_response()` and shapes the output so the frontend can render function-call transcripts (`app/app.py:115-161`).
-3. Otherwise, `/chat` calls `client.responses.create()` with the general system prompt and returns plain text (`app/app.py:191-200`).
+1. `app/consultant_router.py` calls `ROUTER_MODEL` (default `gpt-4.1-mini`) with a JSON-only system prompt plus a lightweight catalog of consultants so it can emit `{"mode":"direct|single|parallel","primary":"...", ...}`. A keyword fallback kicks in if the router API fails or the model is missing.
+2. `/v1/router/preview` exposes that decision to the frontend so it can show toast notifications (“Routing…”, “Calling 3 consultants…”) before the actual `/chat` request fires.
+3. When `/chat` receives a router payload with `mode: "single"`, `_consultant_tool_call()` runs exactly one consultant (same behavior as before but now instrumented with progress logs). When `mode: "parallel"`, `_run_parallel_consultants()` fans out with a `ThreadPoolExecutor`, collects each consultant’s notes/files, and then `_summarize_consultant_results()` feeds everything back through `CHAT_MODEL` with `PARALLEL_SUMMARY_SYSTEM` to produce a merged response.
+4. Router metadata plus a chronological `progress_log` array are returned to the browser so the UI can reflect each stage; failures per consultant are captured in `failures[]` without aborting the entire request when at least one agent succeeds.
+5. If the caller specifies `consultant_key` explicitly (e.g., via dropdown), the router is bypassed and `/chat` acts exactly like the legacy keyword matcher.
 
 ### 5.3 REST surface area
 
@@ -173,7 +175,7 @@ Data flow:
 
 | Module | Highlights |
 | --- | --- |
-| `static/js/main.js` | Creates managers, wires DOM events, handles send/stop button state, manages scrolling, and processes tool calls like `generate_pdf`. |
+| `static/js/main.js` | Creates managers, wires DOM events, handles send/stop button state, manages scrolling, triggers the router preview/toast workflow, and processes tool calls like `generate_pdf`. |
 | `static/modules/chatSession.js` | Keeps per-session metadata, persists to `localStorage`, provisions vector stores and containers via backend endpoints, and renames sessions using `/v1/responses` (`chatSession.js:75-226`, `chatSession.js:246-374`). |
 | `static/modules/chatClient.js` | Builds the payload for `/chat`, ensures vector store + container IDs exist, defines the `generate_pdf`, `web_search_preview`, and `code_interpreter` tools, and records returned messages (`chatClient.js:12-181`). |
 | `static/modules/fileManager.js` | Handles drag/drop + input uploads, pushes files to OpenAI, mirrors analysis files into the session’s container, links everything to the vector store, ingests model-generated artifacts, and cleans up OpenAI copies on delete (`fileManager.js`). |

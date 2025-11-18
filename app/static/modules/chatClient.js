@@ -9,7 +9,8 @@ export class ChatClient {
     this.sessionManager = sessionManager;
   }
 
-  async sendMessage(prompt, useStreaming = false, signal = null, systemPrompt = "") {
+  // Optional routerDecision allows the caller to hint which consultants to run.
+  async sendMessage(prompt, useStreaming = false, signal = null, systemPrompt = "", routerDecision = null) {
     const session = this.sessionManager.getCurrentSession() || {};
     const history = this.sessionManager.getHistory() || [];
 
@@ -173,6 +174,8 @@ export class ChatClient {
         vector_store_id: vectorStoreId || null,
         container_id: containerId || null,
         tools,
+        // Pass along the previewed router recommendation so the backend avoids double work.
+        router_decision: routerDecision || null,
       }),
       signal,
     });
