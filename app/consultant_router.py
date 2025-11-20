@@ -255,7 +255,6 @@ def route_consultants(
                 {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
-            temperature=0,
         )
         latency_ms = int((time.time() - start) * 1000)
         text = _extract_text(resp)

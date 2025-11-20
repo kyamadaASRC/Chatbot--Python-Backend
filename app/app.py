@@ -1,5 +1,6 @@
 """Flask application that orchestrates consultants, resources, and chat UI helpers."""
 
+import copy
 import io
 import os
 import uuid
@@ -31,6 +32,8 @@ CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
 When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown) or generate_docx(markdown_text=..., filename=...) depending on the requested format.
 For spreadsheets or tabular deliverables, call generate_xlsx(sheets=[{name:..., rows:[[...], ...]}]).
+When appropriate, use tools like web_search_preview or code_interpreter to enhance your answers.
+You can also call specialized consultants via the call_<consultant> tool names when their expertise fits better than answering yourself
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
@@ -268,6 +271,92 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
     return generated
 
 
+def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], limit: int = 8) -> List[Dict[str, str]]:
+    """Trim conversation history to recent user/assistant turns for assistant calls."""
+    if not isinstance(history, list) or not history:
+        return []
+    cleaned: List[Dict[str, str]] = []
+    for entry in history[-limit:]:
+        if not isinstance(entry, dict):
+            continue
+        role = entry.get("role")
+        if role not in ("user", "assistant"):
+            continue
+        content = entry.get("content")
+        if not isinstance(content, str):
+            continue
+        text = content.strip()
+        if not text:
+            continue
+        cleaned.append({"role": role, "content": text[:2000]})
+    return cleaned
+
+
+def _build_consultant_tool_specs() -> List[Dict[str, Any]]:
+    """Expose each consultant as a callable tool so the general model can delegate work."""
+    specs: List[Dict[str, Any]] = []
+    for key, meta in CONSULTANTS.items():
+        display = meta.get("display_name", key)
+        summary = meta.get("summary") or f"Delegate acquisition tasks handled by {display}."
+        specs.append(
+            {
+                "type": "function",
+                "name": f"{CONSULTANT_TOOL_PREFIX}{key}",
+                "description": summary,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "User request to provide to the consultant.",
+                        },
+                        "context": {
+                            "type": "string",
+                            "description": "Additional background or notes for the consultant.",
+                        },
+                        "vector_store_id": {
+                            "type": "string",
+                            "description": "Override vector store id for this call (optional).",
+                        },
+                        "container_id": {
+                            "type": "string",
+                            "description": "Override code interpreter container id (optional).",
+                        },
+                    },
+                },
+            }
+        )
+    return specs
+
+
+CONSULTANT_TOOL_SPECS = _build_consultant_tool_specs()
+
+
+def _extract_consultant_tool_calls(outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Find consultant tool invocations embedded in a Responses payload."""
+    calls: List[Dict[str, Any]] = []
+    for entry in outputs:
+        if not isinstance(entry, dict):
+            continue
+        entry_type = entry.get("type")
+        if entry_type not in ("function_call", "output_tool_call"):
+            continue
+        name = entry.get("name") or entry.get("function", {}).get("name")
+        if not name or not name.startswith(CONSULTANT_TOOL_PREFIX):
+            continue
+        consultant_key = name[len(CONSULTANT_TOOL_PREFIX) :]
+        if consultant_key not in CONSULTANTS:
+            continue
+        calls.append(
+            {
+                "tool_name": name,
+                "consultant_key": consultant_key,
+                "arguments": _coerce_tool_args(entry),
+            }
+        )
+    return calls
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)  # enable CORS for all routes
@@ -308,25 +397,6 @@ def create_app() -> Flask:
         return ("pdf" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)) or (
             "docx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)
         ) or ("xlsx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered))
-
-
-    def _match_consultant_alias(message: str) -> Optional[str]:
-        """Lightweight keyword matcher used when users call out a consultant by name."""
-        raw = (message or "").lower()
-        compact = re.sub(r"[^a-z0-9]+", "", raw)
-        for key, meta in CONSULTANTS.items():
-            for alias in meta.get("aliases", []):
-                alias_raw = (alias or "").lower()
-                alias_compact = re.sub(r"[^a-z0-9]+", "", alias_raw)
-                if alias_raw and alias_raw in raw:
-                    return key
-                if alias_compact and alias_compact in compact:
-                    return key
-            for keyword in meta.get("keywords", []):
-                keyword = (keyword or "").lower()
-                if keyword and keyword in raw:
-                    return key
-        return None
 
 
     def _log_progress(log: Optional[List[Dict[str, Any]]], stage: str, **extra: Any) -> None:
@@ -607,6 +677,8 @@ def create_app() -> Flask:
         requested_consultant = data.get("consultant_key")
         incoming_tools = data.get("tools")
         router_payload = data.get("router_decision")
+        history_payload = data.get("history")
+        history_messages = _normalize_history_for_model(history_payload)
         if not msg:
             return jsonify({"error": "Missing message"}), 400
 
@@ -627,7 +699,7 @@ def create_app() -> Flask:
             else:
                 router_decision = RouterDecision.from_dict(router_payload)
                 if not router_decision:
-                    router_decision = route_consultants(msg)
+                    router_decision = route_consultants(msg, history=history_messages)
             _log_progress(progress_log, "router", mode=router_decision.mode)
             if router_decision.mode == "single":
                 consultant_key = router_decision.primary or DEFAULT_CONSULTANT_KEY
@@ -647,12 +719,6 @@ def create_app() -> Flask:
                     return jsonify(payload)
                 except Exception as exc:
                     return jsonify({"error": str(exc)}), 500
-
-            elif router_decision.mode == "direct" and not forced_direct:
-                # Direct mode still honors explicit consultant mentions such as "Agent iWant".
-                alias_key = _match_consultant_alias(msg)
-                if alias_key:
-                    consultant_key = alias_key
 
         if consultant_key:
             try:
@@ -692,15 +758,54 @@ def create_app() -> Flask:
                 if not has_file_search:
                     tools.insert(0, {"type": "file_search", "vector_store_ids": [vector_store_id]})
 
+            for spec in CONSULTANT_TOOL_SPECS:
+                tools.append(copy.deepcopy(spec))
+
+            convo_input: List[Dict[str, str]] = [
+                {"role": "system", "content": GENERAL_CHAT_SYSTEM},
+            ]
+            convo_input.extend(history_messages)
+            convo_input.append({"role": "user", "content": msg})
             resp = client.responses.create(
                 model=CHAT_MODEL,
-                input=[
-                    {"role": "system", "content": GENERAL_CHAT_SYSTEM},
-                    {"role": "user", "content": msg},
-                ],
+                input=convo_input,
                 tools=tools or None, # type: ignore
             )
             serialized = _ensure_dict(resp)
+            consultant_calls = _extract_consultant_tool_calls(serialized.get("output") or [])
+            if consultant_calls:
+                primary = consultant_calls[0]
+                if len(consultant_calls) > 1:
+                    print(f"[consultant-tools] Multiple consultant tool calls detected; executing {primary['tool_name']} first.")
+                args = primary.get("arguments") or {}
+                delegated_question = args.get("question") or msg
+                context = args.get("context")
+                if context:
+                    context = context.strip()
+                if delegated_question:
+                    delegated_question = delegated_question.strip()
+                if delegated_question and context:
+                    delegated_question = f"{delegated_question}\n\nAdditional context:\n{context}"
+                elif context and not delegated_question:
+                    delegated_question = context
+                delegated_question = delegated_question or msg
+                delegated_vector_store = args.get("vector_store_id") or vector_store_id
+                delegated_container = args.get("container_id") or container_id
+                try:
+                    payload = _consultant_tool_call(
+                        delegated_question,
+                        project,
+                        delegated_vector_store,
+                        delegated_container,
+                        primary["consultant_key"],
+                        router_decision=router_decision,
+                        progress_log=progress_log,
+                    )
+                    payload["triggered_tool"] = primary["tool_name"]
+                    payload["triggered_by_general_model"] = True
+                    return jsonify(payload)
+                except Exception as exc:
+                    return jsonify({"error": str(exc)}), 500
             text = _extract_text(resp) or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
             generated_files = []

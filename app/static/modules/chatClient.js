@@ -153,7 +153,7 @@ export class ChatClient {
     }
     tools.push(codeInterpreterTool);
 
-    const payload = {
+  const payload = {
       model: this.model,
       input,
       tools,
@@ -174,6 +174,7 @@ export class ChatClient {
         vector_store_id: vectorStoreId || null,
         container_id: containerId || null,
         tools,
+        history: historyMsgs,
         // Pass along the previewed router recommendation so the backend avoids double work.
         router_decision: routerDecision || null,
       }),
