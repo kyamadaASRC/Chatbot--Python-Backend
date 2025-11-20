@@ -1,0 +1,41 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/SSA Appointment Template SCO_MANDATORY.docx",
+  "placeholder_count": 7,
+  "placeholders": [
+    {
+      "location": "paragraph[7]",
+      "text": "MEMORANDUM FOR [Insert Name, Title], Army Contracting Command - Rock Island, [insert office symbol], 3055 Rodman Avenue, Rock Island, Illinois, 61299-8000.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[9]",
+      "text": "SUBJECT: Appointment as Source Selection Authority (SSA), [INSERT NAME OF PROGRAM OR ACQUISITION], [INSERT SOLICITATION NUMBER ].",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[12]",
+      "text": "Pursuant to the authority granted to me under Army Federal Acquisition Regulation Supplement, paragraph 5115.303, and Army Contracting Command memorandum subject \u201cDelegation of Authority Number #23-03, Appointment of Senior Contracting Official (SCO)\u201d dated November 28, 2022, acting in my capacity as the SCO for Army Contracting Command - Rock Island, I hereby appoint you, [INSERT NAME OF SSA APPOINTEE], the SSA for the [INSERT NAME OF PROGRAM OR ACQUISITION].",
+      "context": "List Paragraph"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "2. The purpose of the [INSERT NAME OF PROGRAM OR ACQUISITION] is to [INSERT A DESCRIPTION OF THE REQUIREMENT]. The [INSERT NAME OF PROGRAM OR ACQUISITION] will result in [INSERT CONTRACT TYPE AND LENGTH].  The total estimated value of the contract is [INSERT DOLLAR VALUE].",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[48]",
+      "text": "Your authority is limited to this acquisition, and appointment terminates upon successful award of the [INSERT NAME OF PROGRAM OR ACQUISITION] and resolution of any protest(s), as applicable.",
+      "context": "List Paragraph"
+    },
+    {
+      "location": "paragraph[50]",
+      "text": "This appointment as the SSA for the [INSERT NAME OF PROGRAM OR ACQUISITION] is to you personally, and you may not redelegate this authority. If, for any reason, you are unable to complete your duties as SSA, please notify me promptly.",
+      "context": "List Paragraph"
+    },
+    {
+      "location": "paragraph[71]",
+      "text": "[INSERT NAME], Contracting Officer",
+      "context": "Normal"
+    }
+  ]
+}

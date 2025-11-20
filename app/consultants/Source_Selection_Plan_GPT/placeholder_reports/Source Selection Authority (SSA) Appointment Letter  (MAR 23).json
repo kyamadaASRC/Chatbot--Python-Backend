@@ -1,0 +1,56 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Authority (SSA) Appointment Letter  (MAR 23).docx",
+  "placeholder_count": 10,
+  "placeholders": [
+    {
+      "location": "paragraph[3]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[9]",
+      "text": "MEMORANDUM FOR (Insert SSA\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[11]",
+      "text": "SUBJECT:  Appointment as Source Selection Authority, (Insert Name of Program/Acquisition)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "1.\u00a0\u00a0\u00a0Acting in my capacity as (Insert Appointment Level, e.g. Deputy Assistant Secretary of the Army (Procurement),  Head of the Contracting Activity or the Senior Contracting Official) for the (insert Office/Command Name) Command, I hereby designate you, (insert Individual\u2019s Name), the Source Selection Authority (SSA) for the (insert name of Program/Acquisition).  This appointment is made per AFARS 5115.303 Responsibilities.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[22]",
+      "text": "5. \t(Insert Individual\u2019s Name), (Insert Contracting Office), should serve on the SSAC, as well as any other individual you believe is necessary.  You may also choose to appoint subject matter experts as advisors, as appropriate.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[24]",
+      "text": "6.  \tI am advised that you have discussed your appointment with the (insert Office/Command Name) Command Ethics Counselor and you have received an ethics briefing and the Ethics Counselor has conducted the appropriate screening of your financial disclosure report and there are no financial conflicts of interest that would preclude you from performing the duties of the SSA.  You are also to consult with an Ethics Counselor should any situation arise which might result in a conflict of interest, or even the appearance of one.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[26]",
+      "text": "7.  \tThis appointment as the SSA for the (insert name of Program/Acquisition) is to you personally, and you may not re-delegate this authority. If, for any reason, you are unable to complete your duties as SSA, please notify me promptly.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[30]",
+      "text": "(Insert Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[36]",
+      "text": "(Insert Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[42]",
+      "text": "(Insert Name)",
+      "context": "Normal"
+    }
+  ]
+}

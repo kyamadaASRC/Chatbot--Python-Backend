@@ -208,6 +208,14 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
             instructions = instruction_path.read_text(encoding="utf-8").strip()
         else:
             instructions = metadata.get("instructions", DEFAULT_INSTRUCTION_TEXT)
+        instructions += (
+            "\n\nTEMPLATE PLACEHOLDER HANDLING\n"
+            "Before editing any uploaded DOCX/XLSX template, load the matching JSON report "
+            "from the `placeholder_reports/` subfolder (filename stem matches the template). "
+            "Use that report inside Code Interpreter to locate the exact paragraph or cell "
+            "text to overwrite so you never rely on generic “Insert …” cues. Build your "
+            "replacement map from that JSON and update the template accordingly."
+        )
 
         ignore_files = ["metadata.json"]
         if instruction_path:

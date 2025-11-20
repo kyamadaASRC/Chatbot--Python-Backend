@@ -1,0 +1,41 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Performance Assessment Questionnaire.docx",
+  "placeholder_count": 7,
+  "placeholders": [
+    {
+      "location": "paragraph[4]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[6]",
+      "text": "(Insert Date)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[11]",
+      "text": "SUBJECT: Offeror Past Performance Assessment in Support of Request for Proposal (RFP) (Insert Solicitation Number)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[15]",
+      "text": "The US Army (insert command) is currently conducting a competitive source selection to evaluate offerors on the subject RFP.  As part of this evaluation, we have requested that the offerors provide information about their past performance on same or similar federal, state, or local government or commercial contracts as compared to the North American Industry Classification System [NAICS] (insert NAICS).  You have been identified as the point of contact cited on the enclosure.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "Your assessment of their performance is extremely valuable to our evaluation.  Please complete the enclosure and return to the (insert Contracting Office and address), no later than 15 days after receipt of request or (insert date), whichever occurs first.  Submit your completed questionnaire to (insert Contracting Officer/Specialist\u2019s email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[19]",
+      "text": "Your cooperation is greatly appreciated.  Questions may be directed to the undersigned at (insert telephone number and/or email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[27]",
+      "text": "(Insert name)",
+      "context": "Normal"
+    }
+  ]
+}

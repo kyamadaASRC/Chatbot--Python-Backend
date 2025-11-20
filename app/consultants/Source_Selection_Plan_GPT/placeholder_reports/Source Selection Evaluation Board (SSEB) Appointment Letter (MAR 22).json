@@ -1,0 +1,41 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Evaluation Board (SSEB) Appointment Letter (MAR 22).docx",
+  "placeholder_count": 7,
+  "placeholders": [
+    {
+      "location": "paragraph[3]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[8]",
+      "text": "MEMORANDUM FOR (Insert SSEB Member\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "SUBJECT:  Assignment to the Source Selection Evaluation Board, (Insert Name of Program/Acquisition)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[29]",
+      "text": "(Insert Contracting Officer\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[30]",
+      "text": "(Insert Contracting Officer\u2019s Address)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[37]",
+      "text": "Encls                                                                    (Insert SSEB Chairperson\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[45]",
+      "text": "(Insert SSAC Chairperson\u2019s Name)",
+      "context": "Normal"
+    }
+  ]
+}

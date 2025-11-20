@@ -1,0 +1,91 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_16_JEFO_Bridge_MANDATORY_v3.docx",
+  "placeholder_count": 17,
+  "placeholders": [
+    {
+      "location": "paragraph[16]",
+      "text": "Technical:\t\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[20]",
+      "text": "Requirements:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[21]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[32]",
+      "text": "Program Manager:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[36]",
+      "text": "Program Executive\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[41]",
+      "text": "Legal Advisor:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[45]",
+      "text": "Competition Advocate:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[50]",
+      "text": "Chief Counsel:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[73]",
+      "text": "2. Description of Action:  Insert customer\u2019s office (e.g., The Logistics Modernization Program Project Office) requests a type of contract (e.g., firm-fixed-price, cost-reimbursement, etc.) bridge task order, bridge delivery order or bridge modification to W52P1J/W519TC-XX-X-XXXX with contractor name.  ACC-RI will execute this action against the insert multiple award contract name (e.g., Computer Hardware, Enterprise Software and Solutions (CHESS) Information Technology Enterprise Solutions - 3 Hardware (ITES-3H)) contract.  ACC-RI projects award for Month 20YY and will obligate fiscal year 20YY, funds type (e.g., Operations and Maintenance, Army or Other Procurement Army) funds.  Choose one of the following six scenarios to address the acquisition plan. Scenarios 1-4 apply to new orders, 5 and 6 apply to modifications to orders; while scenario 2 could apply to either a new order or a modification to an order. (1) An acquisition plan is not required because this procurement does not meet the threshold at Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B). (2) An acquisition plan is not required in accordance with (IAW) Defense Federal Acquisition Regulation Supplement 207.103(e) because this acquisition is included in the XXXX (e.g., LOGCAP) program level acquisition plan. (3) Approval authority title waived the detail and formality of the acquisition plan on date, in accordance with Federal Acquisition Regulation 7.103(m), due to the compressed delivery \u2013 or - performance schedule of the requirement. (4) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date \u2013 or is currently awaiting approval authority title approval. (5) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date for contract W52P1J/W519TC-XX-X-XXXX (refers to the original contract if a mod is being issued for the bridge). An amendment to the plan was required and was approved by approval authority title on date \u2013 or \u2013 is awaiting approval authority title approval. (6) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date for contract W52P1J/W519TC-XX-X-XXXX (refers to the original contract if a mod is being issued for the bridge).  No amendment to the plan is required because position title determined the changes resulting from this modification are not significant because why.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[89]",
+      "text": "a. ACC-RI competitively awarded insert original order number under the insert name multiple contract vehicle on DD Month Year, with a PoP of insert length. All awardees were provided a fair opportunity to be considered under the original order (NOTE: this is a condition for use of this exception). This is the first or second or third, etc use of this exception under this task or delivery order. The relationship between the initial order and the bridge extension is logical because explain why, e.g., in terms of scope, period of performance, value, etc).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[127]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[128]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[134]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[135]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[141]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[148]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Parts_ 6_And_13.5_J_And_A_Bridge MANDATORY_v3.docx",
+  "placeholder_count": 22,
+  "placeholders": [
+    {
+      "location": "paragraph[9]",
+      "text": "Prepared by: \t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[13]",
+      "text": "Contracting Officer:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "Technical:\t\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[18]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[21]",
+      "text": "Requirements:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[22]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[31]",
+      "text": "Program Manager:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[35]",
+      "text": "Program Executive\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[40]",
+      "text": "Legal Advisor:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[44]",
+      "text": "Competition Advocate:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[49]",
+      "text": "Chief Counsel:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[72]",
+      "text": "2. Description of Action:  Insert customer\u2019s office (e.g., The Logistics Modernization Program Project Office) requests a type of contract (e.g., firm-fixed-price, cost-reimbursement, etc.) bridge contract or bridge modification extending contract W52P1J/W519TC-XX-X-XXXX with contractor name.  ACC-RI projects award for Month 20YY and will obligate fiscal year 20YY, funds type (e.g., Operations and Maintenance, Army or Other Procurement Army) funds.  Choose one of the following six scenarios to address the acquisition plan.  Scenarios 1, 2, 3 and 6 apply to new, interim sole source contracts, while 4 and 5 apply to modifications. (1) An acquisition plan is not required because this procurement does not meet the threshold at Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B). (2) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date. (3) The required acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) is currently awaiting approval authority title approval. (4) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date for contract W52P1J/W519TC-XX-X-XXXX (refers to the original contract if a mod is being issued for the bridge). An amendment to the plan was required and was approved by approval authority title on date \u2013 or \u2013 is awaiting approval authority title approval. (5) Approval authority title approved an acquisition plan in accordance with Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B) on date for contract W52P1J/W519TC-XX-X-XXXX (refers to the original contract if a mod is being issued for the bridge).  No amendment to the plan is required because position title determined the changes resulting from this modification are not significant because why.  (6) Approval authority title waived the detail and formality of the acquisition plan on date, in accordance with Federal Acquisition Regulation 7.103(m), due to the compressed delivery \u2013 or - performance schedule of the requirement.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[115]",
+      "text": "6. Efforts to Obtain Competition:  Describe efforts to ensure that the Government solicits offers from as many potential sources as practicable.  ACC-RI shall publish the notices required by FAR 5.201. OR In accordance with FAR 5.202(a)(insert exclusion number), ACC-RI will not synopsize this action. Because this is a sole source action, effective competition is not applicable.  The Government will achieve subcontracting competition by describe how. In single source situations, address efforts the Government will take to assure that the prime contractor obtains as much competition as possible in its subcontracting.  For example, \u201cThe contract [or modification, as applicable] contains/will contain [choose one] FAR clause 52.244-5, Competition in Subcontracting, which states that the contractor shall select subcontractors on a competitive basis to the maximum practicable extent.\u201d  Note that this section of the J&A addresses competition in subcontracting, not small business subcontracting.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[121]",
+      "text": "For J&As citing the authority of (a) FAR 6.302-1 (this applies to any J&A citing the FAR 6.302-1 authority); or (b) FAR 13.501 (only for follow-on acquisitions previously awarded on a non-competitive basis (IAW FAR 13.501(a)(i)), state the following: In accordance with Defense Federal Acquisition Regulation Supplement (DFARS) 205.205-71, DFARS 206.302-1(d), and DFARS Procedures, Guidance and Information 206.302-1(d), ACC-RI posted a request for information or sources sought (choose one) to (input location, e.g. SAM.gov) on (insert date) for (insert number of days).  The results of the posting were as follows. (insert result detail).",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[153]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[154]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[160]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[161]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[167]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[174]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    }
+  ]
+}

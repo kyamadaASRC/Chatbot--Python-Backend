@@ -1,0 +1,76 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/06b_IGE_Narrative_Template.docx",
+  "placeholder_count": 14,
+  "placeholders": [
+    {
+      "location": "paragraph[2]",
+      "text": "Prepared by: [[PREPARER_NAME]], [[ORGANIZATION]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[4]",
+      "text": "Requirement Title: [[REQUIREMENT_TITLE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[5]",
+      "text": "Scope Summary: [[SCOPE_SUMMARY]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[6]",
+      "text": "Place of Performance: [[PLACE_OF_PERFORMANCE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[7]",
+      "text": "Period of Performance: [[POP_BASE]] base + [[POP_OPTIONS]] options; 52.217-8: [[-8_PRICED]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[9]",
+      "text": "Approach: [[COST_METHOD]] (e.g., bottom-up labor build using MAS/vehicle rates; parametric analogies; prior awards).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "Contract Type: [[CONTRACT_TYPE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[11]",
+      "text": "Assumptions & Constraints: [[ASSUMPTIONS]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "Escalation Basis: [[ESCALATION_BASIS]] (e.g., BLS ECI/PPI).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[15]",
+      "text": "SCA/DBA Applicability: [[SCA_DBA_APPLICABILITY]]; Wage Determination: [[WD_NUMBER]], [[AREA]].",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "ODCs: [[ODC_NOTES]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[18]",
+      "text": "Travel: [[TRAVEL_NOTES]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[19]",
+      "text": "Subcontracts: [[SUBK_NOTES]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[23]",
+      "text": "List of sources with URLs, dates accessed, and relevance is included in the IGCE workbook \u2018Sources_Registry\u2019 tab. Key sources: [[KEY_SOURCES_BULLETS]].",
+      "context": "Normal"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Evaluation Board (SSEB) Chairperson Appointment Letter  (MAR 22).docx",
+  "placeholder_count": 6,
+  "placeholders": [
+    {
+      "location": "paragraph[3]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[8]",
+      "text": "MEMORANDUM FOR (Insert Name of SSEB Chairperson)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "SUBJECT:  Memorandum of Appointment, Source Selection Evaluation Board Chairperson, (Insert Name of Program/Acquisition)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[25]",
+      "text": "(Insert Contracting Officer\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[26]",
+      "text": "(Insert Contracting Officer\u2019s Address)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[32]",
+      "text": "2 Encls\t\t\t\t\t(Insert Name)",
+      "context": "Normal"
+    }
+  ]
+}

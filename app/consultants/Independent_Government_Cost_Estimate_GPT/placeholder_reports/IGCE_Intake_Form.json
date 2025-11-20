@@ -1,0 +1,76 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/IGCE_Intake_Form.docx",
+  "placeholder_count": 14,
+  "placeholders": [
+    {
+      "location": "table[0].row[0].col[1]",
+      "text": "[[REQUIREMENT_TITLE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[1].col[1]",
+      "text": "[[CONTRACT_TYPE]]  (FFP|CR)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[2].col[1]",
+      "text": "[[PORTFOLIO]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[3].col[1]",
+      "text": "[[PLACE_OF_PERFORMANCE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[4].col[1]",
+      "text": "Base [[POP_BASE_MONTHS]] months; Options [[POP_OPTIONS]]; 52.217-8: [[OPTION_2178]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[5].col[1]",
+      "text": "[[SCA_DBA]]  (SCA|DBA|None)  Locality/Wage Determination: [[WD_REFERENCE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[6].col[1]",
+      "text": "[[LABOR_BASIS]]  (FTE plan|Level-of-effort|Unknown)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[7].col[1]",
+      "text": "[[VEHICLES_OF_INTEREST]]  (MAS/SEWP/CHESS/NITAAC/Other/None)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[8].col[1]",
+      "text": "[[KNOWN_COMPARABLES]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[9].col[1]",
+      "text": "Base=1.00, OY1=[[ESC1]], OY2=[[ESC2]], OY3=[[ESC3]], OY4=[[ESC4]], OY5=[[ESC5]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[10].col[1]",
+      "text": "[[ODCS]]  (Travel, Software, SubK, Materials, Other)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[11].col[1]",
+      "text": "[[[RISK_NOTES]]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[12].col[1]",
+      "text": "[[PROG_POC_NAME]]  [[PROG_POC_EMAIL]]",
+      "context": "Normal"
+    },
+    {
+      "location": "table[0].row[13].col[1]",
+      "text": "[[KO_NAME]]  [[KO_EMAIL]]  |  [[CS_NAME]]  [[CS_EMAIL]]",
+      "context": "Normal"
+    }
+  ]
+}

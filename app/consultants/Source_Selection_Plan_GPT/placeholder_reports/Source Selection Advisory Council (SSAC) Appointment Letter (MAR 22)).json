@@ -1,0 +1,41 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Advisory Council (SSAC) Appointment Letter (MAR 22)).docx",
+  "placeholder_count": 7,
+  "placeholders": [
+    {
+      "location": "paragraph[3]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[8]",
+      "text": "MEMORANDUM FOR (Insert SSAC Member\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "SUBJECT:  Appointment to Source Selection Advisory Council, (Insert Name of Program/Acquisition)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[24]",
+      "text": "SUBJECT:  Appointment, Source Selection Advisory Council, (Insert Name of Program/Acquisition)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[29]",
+      "text": "(Insert Contracting Officer\u2019s Name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[30]",
+      "text": "(Insert Contracting Officer\u2019s Address)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[36]",
+      "text": "Encls                                                         (Insert Name)",
+      "context": "Normal"
+    }
+  ]
+}

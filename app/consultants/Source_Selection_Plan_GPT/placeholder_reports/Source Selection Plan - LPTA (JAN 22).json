@@ -1,0 +1,106 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Plan - LPTA (JAN 22).docx",
+  "placeholder_count": 20,
+  "placeholders": [
+    {
+      "location": "paragraph[110]",
+      "text": "This Lowest Price Technically Acceptable (LPTA) Source Selection Plan (SSP) defines how the source selection will be organized, how proposals will be evaluated and analyzed, and how source(s) will be selected to provide (insert acquisition description) in support of the (insert customer).",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[114]",
+      "text": "The (insert contracting office) has a requirement from the (insert customer) to provide (insert Acquisition Description). [Include a brief description of the requirement, a summary of the objectives, and any reference to applicable guidance.]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[122]",
+      "text": "The program will be acquired on a (insert competition type, i.e. full and open, small business set-aside, etc.) competitive basis utilizing LPTA procedures to obtain best value for the Government. The Source Selection Evaluation Board (SSEB) will establish the Factors and Subfactors to be evaluated on an \u201cacceptable\u201d or \u201cunacceptable\u201d basis.  These Factors and Subfactors will identify the minimum requirements that are key to successful contract performance.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[388]",
+      "text": "1.\tThis Agreement applies to individuals involved in the (insert name of Program/Acquisition), Solicitation (insert number, if known).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[396]",
+      "text": "Have been made aware of the following potential offeror(s) or subcontractor(s) that have either shown interest through market research, or responded to the subject solicitation: (insert list of all potential offeror(s) or subcontractor(s) found through sources such as market research, professional knowledge of the industry, Request for Information, Industry Days, and response to subject solicitation, etc.)",
+      "context": "List Paragraph"
+    },
+    {
+      "location": "paragraph[509]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[511]",
+      "text": "(Insert Date)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[516]",
+      "text": "SUBJECT: Offeror Past Performance Assessment in Support of Request for Proposal (RFP) (Insert Solicitation Number)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[520]",
+      "text": "The US Army (insert command) is currently conducting a competitive source selection to evaluate offerors on the subject RFP.  As part of this evaluation, we have requested that the offerors provide information about their past performance on recent and relevant federal, state, or local government or commercial contracts as compared to the North American Industry Classification System [NAICS] (insert NAICS).  You have been identified as the point of contact cited on the enclosure.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[522]",
+      "text": "Your assessment of their performance is extremely valuable to our evaluation.  Please complete the enclosure and return to the (insert Contracting Office and address), no later than 15 days after receipt of request or (insert date), whichever occurs first.  Submit your completed questionnaire to (insert Contracting Officer/Specialist\u2019s email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[524]",
+      "text": "Your cooperation is greatly appreciated.  Questions may be directed to the undersigned at (insert telephone number and/or email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[532]",
+      "text": "(Insert name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[804]",
+      "text": "(Insert Contracting Office)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[806]",
+      "text": "MEMORANDUM FOR (insert Contractor name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[810]",
+      "text": "1. Enclosed is a summary of your telephone conversation, (insert date), with a member of a Past Performance Team at this Command.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[812]",
+      "text": "2.  Please review and verify the accuracy of this report and e-mail or fax it to my point of contact listed below by (insert date). If we do not receive your response by the date indicated above, we will consider the summary of the discussion official.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[814]",
+      "text": "3. We would like to thank you in advance for your time and assistance regarding this acquisition. If you have any questions or comments, please contact: (Insert name, title, phone number, email address, fax number).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[818]",
+      "text": "(Insert name)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[26].row[3].col[0]",
+      "text": "Evaluation Rating: \n(Insert appropriate rating e.g., Acceptable, Unacceptable. Consider relevancy assessment/quality of performance as it relates to the reference/project.",
+      "context": "Normal"
+    },
+    {
+      "location": "table[26].row[3].col[1]",
+      "text": "Evaluation Rating: \n(Insert appropriate rating e.g., Acceptable, Unacceptable. Consider relevancy assessment/quality of performance as it relates to the reference/project.",
+      "context": "Normal"
+    }
+  ]
+}

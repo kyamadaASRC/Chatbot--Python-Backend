@@ -1,0 +1,346 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Plan - Subjective Tradeoff (DEC 24).docx",
+  "placeholder_count": 68,
+  "placeholders": [
+    {
+      "location": "paragraph[16]",
+      "text": "[[SSP_TITLE]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "SOLICITATION NUMBER:  [[SOLICITATION_NUMBER]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[24]",
+      "text": "[[CONTRACTING_OFFICE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[25]",
+      "text": "[[CITY_STATE_ZIP]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[31]",
+      "text": "[[DOCUMENT_DATE]]",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[112]",
+      "text": "This Source Selection Plan (SSP) defines how the source selection will be organized, how proposals will be evaluated and analyzed, and how source(s) will be selected to provide [[ACQUISITION_DESCRIPTION]] in support of the [[CUSTOMER_NAME]].",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[117]",
+      "text": "The [[CONTRACTING_OFFICE]] has a requirement from the [[CUSTOMER_NAME]]. to provide [[ACQUISITION_DESCRIPTION]]. [Include a brief description of the requirement, a summary of the objectives, and any reference to applicable guidance.]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[124]",
+      "text": "The program will be acquired on a [[COMPETITION_TYPE]] (F&O|SB Set-Aside|Other) competitive basis. Award will be made to the best overall proposal that is determined to be the most beneficial to the Government.  Evaluation methodology for the instant procurement consists of [[FACTOR_COUNT] factors [[FACTOR_LIST]] (e.g., Technical, Cost/Price, Past Performance, SB Participation).  The business goal of the contract is to purchase [[ACQUISITION_DESCRIPTION]].  An industry day was conducted in [[INDUSTRY_DAY_DATE]]. Approximately [[INDUSTRY_DAY_OFFEROR_COUNT]]\u00a0potential offerors participated.  [[INDUSTRY_DAY_SB_COUNT]] of the potential offerors were small business concerns.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[134]",
+      "text": "Each volume shall be submitted electronically [[SUBMISSION_PORTAL]] (e.g., PIEE/SAFE/E-Mail).  Any portion of the proposal that is changed (as a result of negotiations or proposal revisions) should be annotated and dated. Each volume shall be clearly labeled with its Title and a copy number (e.g., copy 1 of 5).",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[164]",
+      "text": "(1) Section 1 \u2013 Subfactor 1.  This subfactor evaluates the offeror\u2019s [[SUBFACTOR_1_DESCRIPTION]].   The Offeror will provide information to substantiate the following:",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[166]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[168]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[170]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[174]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[176]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[178]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[182]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[184]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[186]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[196]",
+      "text": "(iii) VOLUME III \u2013 Past Performance.  This volume shall contain past performance information regarding similar contracts.  This volume shall not exceed 25 pages plus five pages for each major subcontractor, excluding Past Performance Questionnaire Forms.  Offerors shall submit all Government and/or commercial contracts for the prime offeror and each major subcontractor in performance or awarded during the past three years, from the issue date of this RFP, which are relevant to the efforts required by this solicitation.  Relevant efforts are defined as services/efforts that are the same as or similar to the effort (as compared to North American Industry Classification System (NAICS) code [[NAICS]] required by the RFP.  Data concerning the offeror shall be provided first, followed by each proposed major subcontractor, in alphabetical order.  The Offeror shall also submit the written consent of its major subcontractors to allow the disclosure of its subcontractor\u2019s past performance information to the Offeror.  In addition, letters of commitment shall be included for all major subcontractors for their past performance to be considered.  This volume shall be organized into the following sections:",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[228]",
+      "text": "(3) Section 3 \u2013 Subcontracts. Offerors shall provide an outline of how the effort required by the RFP will be assigned for performance within the offeror\u2019s corporate entity and among the proposed subcontractors.  The information provided for the prime offeror and each proposed major subcontractor must include the entire company name, company address, CAGE Code, DUNS Number and type of work to be performed by citing the applicable Government PWS subparagraph number.  This includes all subcontractors who will be providing critical hardware/services or whose subcontract is for more than (insert percentage) % of the total proposed cost/price.  This section will further include written consent of major subcontractors to allow the disclosure of their subcontractor\u2019s past performance information to the Offeror.  In addition, letters of commitment shall be included for all major subcontractors",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[232]",
+      "text": "(5) Past Performance Questionnaire.  For all contracts identified in Section 1, Contract Descriptions, a Past Performance Questionnaire must be completed and submitted.  The offeror shall complete Part I of the Past Performance Questionnaire and e-mail the questionnaire to both the Government contracting activity and technical representative responsible for the past/current contract.  The POCs shall be instructed to electronically complete Part II of the questionnaire and e-mail the entire questionnaire to the Contracting Office no later than the proposal due date, to (insert email address).   The offeror shall e-mail to the Contracting Officer a list of all the POCs who were sent a questionnaire.  The Government must receive this list no later than the proposal due date.  The POC List shall be submitted in Word for Windows Table Format to include the following fields:  Solicitation Number; Company Name; Contract Number; Government Agency; POC Last Name, First Name; POC Title; POC Telephone Number; POC E-mail Address; and Date E-Mail to POC (month/day).",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[269]",
+      "text": "The award will be made based on the best overall (i.e., best value) proposal that is determined to be the most beneficial to the Government, with appropriate consideration given to the [[NUMBER_OF_EVALUATION_FACTORS]] evaluation factors: [[EVAL_FACTORS]] (insert evaluation factors, e.g., Technical, Cost/Price, Past Performance, and Small Business Participation).  [[RELATIVE_IMPORTANCE_SUMMARY]] (e.g., Tech > PP \u2248 SB > Price).  To receive consideration for award, a rating of no less than \u201cAcceptable\u201d must be achieved for the technical factor (to include all subfactors) and the Small Business Participation factor.  Additionally, any other than small business offeror must have an acceptable Small Business Subcontracting Plan to receive an award in accordance with FAR 19.702(a). Offerors will be cautioned that the award may not necessarily be made to the lowest cost offered.  NOTE:  ALL NON-PRICED FACTORS COMBINED ARE [[NON_PRICE_VS_PRICE_RELATION]]\u00a0THAN COST/PRICE.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[272]",
+      "text": "The following evaluation factors and subfactors will be used to evaluate each proposal: Award will be made to the offeror whose proposal is most advantageous to the Government based upon an integrated assessment of the evaluation factors and subfactors described below.  The Government reserves the right to make award based upon the Cost/Price factor in the event that the Technical, Past Performance, and Small Business Participation (insert/tailor evaluation factors) evaluation results of all the offerors\u2019 proposals are substantially the same.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[279]",
+      "text": "Subfactor 1 is [[RELATIVE_WEIGHT]] than Subfactor 2.  Subfactor 2 is [[RELATIVE_WEIGHT]] than Subfactor 3.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[283]",
+      "text": "Factor\t2:  Cost/Price:  The resulting award will be a [[CONTRACT_TYPE]] (insert contract type).  Cost realism will be utilized in the evaluation of Cost Reimbursable efforts.  Price reasonableness will be utilized in the evaluation of the Firm-Fixed Price effort.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[301]",
+      "text": "Subfactor 1: This subfactor evaluates the offeror\u2019s proposed [[SUBFACTOR_1_DESCRIPTION]] for the basic contract period and all option years.  Marginal levels of overall [[SUBFACTOR_1_TITLE]] could indicate a lack of understanding concerning mission requirements and may result in the entire proposal receiving an unfavorable rating and/or being eliminated from the competitive range.  The evaluation will focus on the offerors\u2019:",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[303]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[305]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[307]",
+      "text": "[[SUBFACTOR_1_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[309]",
+      "text": "Subfactor 2: This subfactor evaluates the offeror\u2019s [[SUBFACTOR_2_TITLE]]. Major emphasis will be placed on the following:",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[311]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[313]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[315]",
+      "text": "[[SUBFACTOR_2_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[317]",
+      "text": "Subfactor 3: This subfactor evaluates the offeror\u2019s [[SUBFACTOR_3_TITLE]]. The evaluation will focus on the offerors\u2019:",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[319]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_1]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[321]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_2]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[323]",
+      "text": "[[SUBFACTOR_3_KEY_POINT_3]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[327]",
+      "text": "3.  Cost/Price Factor.  Adjectival ratings shall not be used for offerors\u2019 Cost/Price proposals. [Tailor the following based on contract structure/type:] The Government will fully evaluate and negotiate all priced Contract Line Item Numbers (CLINs) (insert \u201cordering periods\u201d if ID/IQ) for award.  For award purposes, the total proposed price for all CLINs will be added together into a total sum [[TOTAL_CONTRACT_VALUE]] (insert \u201ccontract ceiling\u201d if ID/IQ).  The evaluation of all option CLINs (insert \u201cordering periods\u201d if ID/IQ) will not obligate the Government to exercise any option (insert \u201cplace more than the minimum order\u201d if ID/IQ).  The Offeror\u2019s Cost/Price proposal will be evaluated as follows.",
+      "context": "annotation text"
+    },
+    {
+      "location": "paragraph[355]",
+      "text": "b. The Government will focus its inquiries on the offeror\u2019s (and major subcontractor\u2019s) record of performance as it relates to all solicitation requirements, including cost, schedule, performance and management of subcontractors.  [If small business past performance (compliance with FAR 52.219-8 and FAR 52.219-9) will be evaluated in the past performance factor, change this sentence to read:\u201d\u2026including cost, schedule, performance, management of subcontractors and compliance with FAR 52.219-8, Utilization of Small Business Concerns, and FAR  52.219-9, Small Business Subcontracting Plan.\u201d] For the purposes of this SSP/Requirement, major subcontractors are defined as members of an offeror\u2019s overall team who are expected to perform (insert percentage) percent or more of the proposed effort.  A significant achievement, problem, or lack of relevant data in any element of the work can become an important consideration in the evaluation process.  Therefore, offerors will be reminded to include the most recent and relevant efforts (within the past three years) in their proposal. Absent any recent and relevant past performance history or when the performance record is so sparse that no meaningful confidence assessment rating can be reasonably assigned, the offeror will be assigned a \u201cneutral confidence rating\u201d and its proposal will not be evaluated either favorably or unfavorably on past performance. The Government may use data provided by the offeror in its proposal and data obtained from other sources, including data in Government files or data obtained through interviews with personnel familiar with the contractor and their current and past performance under Federal, State or Local government or commercial contracts for same or similar services as compared to the NAICS [[NAICS]].",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[358]",
+      "text": "the prime offeror and each major subcontractor in performance or awarded during the past (insert number) years, from the issue date of this RFP, which are relevant to the efforts required by this RFP.  The Government may consider a wide array of information from a variety of sources but is not compelled to rely on all of the information available.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[376]",
+      "text": "[Insert the criteria to be evaluated. For example:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[425]",
+      "text": "1.  GENERAL INFORMATION.\tIn accordance with FAR 15.306(d), discussion sessions with each offeror may be held.  Should discussions take place, all offerors in the competitive range will be allowed a minimum of (insert number) calendar days to submit Final Proposal Revisions.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[427]",
+      "text": "2.  DISCUSSION SCHEDULING.  If discussions are conducted, the Contracting Officer will schedule the discussion sessions, and each offeror will be notified of the time and place at least (insert number) business days prior to their discussion session.  Appropriate security clearances should be provided by the offerors in sufficient time to process the requests.  The Contracting Officer will provide additional instructions with the notification.  The discussion sessions will take place at a facility of the Government\u2019s choosing in the (insert city/state) area.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[732]",
+      "text": "1.\tThis Agreement applies to individuals involved in the (insert name of Program/Acquisition), Solicitation (insert number, if known).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[740]",
+      "text": "Have been made aware of the following potential offeror(s) or subcontractor(s) that have either shown interest through market research, or responded to the subject solicitation: (insert list of all potential offeror(s) or subcontractor(s) found through sources such as market research, professional knowledge of the industry, Request for Information, Industry Days, and response to subject solicitation, etc.)",
+      "context": "List Paragraph"
+    },
+    {
+      "location": "paragraph[845]",
+      "text": "(Insert Command Letterhead)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[847]",
+      "text": "(Insert Date)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[852]",
+      "text": "SUBJECT: Offeror Past Performance Assessment in Support of Request for Proposal (RFP) (Insert Solicitation Number)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[856]",
+      "text": "The US Army (insert command) is currently conducting a competitive source selection to evaluate offerors on the subject RFP.  As part of this evaluation, we have requested that the offerors provide information about their past performance on recent and relevant federal, state, or local government or commercial contracts as compared to the North American Industry Classification System [NAICS] (insert NAICS).  You have been identified as the point of contact cited on the enclosure.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[858]",
+      "text": "Your assessment of their performance is extremely valuable to our evaluation.  Please complete the enclosure and return to the (insert Contracting Office and address), no later than 15 days after receipt of request or (insert date), whichever occurs first.  Submit your completed questionnaire to (insert Contracting Officer/Specialist\u2019s email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[860]",
+      "text": "Your cooperation is greatly appreciated.  Questions may be directed to the undersigned at (insert telephone number and/or email address).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[868]",
+      "text": "(Insert name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1148]",
+      "text": "(Insert Contracting Office)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1150]",
+      "text": "MEMORANDUM FOR (insert Contractor name)",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1154]",
+      "text": "1. Enclosed is a summary of your telephone conversation, (insert date), with a member of a Past Performance Team at this Command.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1156]",
+      "text": "2. Please review and verify the accuracy of this report and e-mail or fax it to my point of contact listed below by (insert date).  If we do not receive your response by the date indicated above, we will consider the summary of the discussion official.",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1158]",
+      "text": "3. We would like to thank you in advance for your time and assistance regarding this acquisition.  If you have any questions or comments, please contact: (Insert name, title, phone number, email address, fax number).",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[1162]",
+      "text": "(Insert name)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[1].row[1].col[3]",
+      "text": "[[TECHNICAL_PAGE_LIMIT]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "table[1].row[2].col[3]",
+      "text": "[[PAST_PERFORMANCE_PAGE_LIMIT]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "table[1].row[3].col[3]",
+      "text": "[[SB_PAGE_LIMIT]]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "table[12].row[3].col[0]",
+      "text": "Evaluation Rating:  \n(Insert appropriate rating from applicable adjectival rating; e.g., Outstanding (O)  Good (G)  Acceptable (A)  Marginal (M)   Unacceptable (U))",
+      "context": "Normal"
+    },
+    {
+      "location": "table[12].row[3].col[1]",
+      "text": "Evaluation Rating:  \n(Insert appropriate rating from applicable adjectival rating; e.g., Outstanding (O)  Good (G)  Acceptable (A)  Marginal (M)   Unacceptable (U))",
+      "context": "Normal"
+    },
+    {
+      "location": "table[33].row[3].col[0]",
+      "text": "Evaluation Rating:  \n(Insert appropriate rating from applicable adjectival rating, e.g., Substantial Confidence, Satisfactory Confidence, Limited Confidence, No Confidence, Neutral Confidence) Consider relevancy assessment/quality of performance as it relates to the reference/project.)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[33].row[3].col[1]",
+      "text": "Evaluation Rating:  \n(Insert appropriate rating from applicable adjectival rating, e.g., Substantial Confidence, Satisfactory Confidence, Limited Confidence, No Confidence, Neutral Confidence) Consider relevancy assessment/quality of performance as it relates to the reference/project.)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[33].row[11].col[0]",
+      "text": "EVALUATION NOTICES (ENs) required for each (INSERT RATING)",
+      "context": "Normal"
+    },
+    {
+      "location": "table[33].row[11].col[1]",
+      "text": "EVALUATION NOTICES (ENs) required for each (INSERT RATING)",
+      "context": "Normal"
+    }
+  ]
+}

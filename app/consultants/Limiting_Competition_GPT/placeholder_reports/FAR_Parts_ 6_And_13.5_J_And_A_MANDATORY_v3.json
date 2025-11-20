@@ -1,0 +1,126 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Parts_ 6_And_13.5_J_And_A_MANDATORY_v3.docx",
+  "placeholder_count": 24,
+  "placeholders": [
+    {
+      "location": "paragraph[9]",
+      "text": "Prepared by: \t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[13]",
+      "text": "Contracting Officer:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "Technical:\t\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[18]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[21]",
+      "text": "Requirements:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[22]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[32]",
+      "text": "Program Manager:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[36]",
+      "text": "Program Executive\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[40]",
+      "text": "Legal Advisor:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[44]",
+      "text": "Competition Advocate:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[49]",
+      "text": "Chief Counsel:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[66]",
+      "text": "2. Description of Action:  Insert customer\u2019s office (e.g., The Logistics Modernization Program Project Office) requests a type of contract (e.g., firm-fixed-price, cost-reimbursement, etc.) contract or contract modification to contract W52P1J-XX-X-XXXX with contractor name.  ACC-RI projects award for Month 20YY and will obligate fiscal year 20YY, funds type (e.g., Operations and Maintenance, Army or Other Procurement Army) funds.  An acquisition plan is not required because this procurement does not meet the threshold at Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B).  OR Approval authority title approved an acquisition plan In Accordance With (IAW) DFARS 207.103(d)(i)(B) on date. OR The required acquisition plan In Accordance With (IAW) DFARS 207.103(d)(i)(B) is currently awaiting approval authority title approval.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[73]",
+      "text": "3. Description of Supplies/Services:  Describe the services or the item you are acquiring.  Include quantities of supplies or provide the period of performance for services.  The period of performance is DD Month 20YY through DD Month 20YY.  The proposed contract will not include an option provision.  OR The proposed contract will include X month or year or XX % evaluated option(s).  Insert estimator title or organization estimates a dollar value of $x,xxx,xxx, including options, based on input the basis of the estimate, for example the Independent Government Estimate.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[137]",
+      "text": "6. Efforts to Obtain Competition:  Describe efforts to ensure that the Government solicits offers from as many potential sources as practicable.  ACC-RI shall publish the notices required by FAR 5.201. OR In accordance with FAR 5.202(a)(insert exclusion number), ACC-RI will not synopsize this action.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[147]",
+      "text": "In accordance with Defense Federal Acquisition Regulation Supplement (DFARS) 205.205-71, DFARS 206.302-1(d), and DFARS Procedures, Guidance and Information 206.302-1(d), ACC-RI posted a request for information or sources sought (choose one) to (input location, e.g. Federal Business Opportunities) on (insert date) for (insert number of days).  The results of the posting were as follows. (insert result detail).",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[149]",
+      "text": "If you are seeking a waiver to the sources sought/request for information posting requirement, (by MFR and normal routing procedures) state such during the draft routing then, when formal routing commences, change to: The Senior Contracting Official/Senior Executive Service approved a waiver to the requirement to post a sources sought or request for information as required by DFARS 206.302-1(d) and DFARS Procedures, Guidance and Information 206.302-1(d) on (insert month, day and year).",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[177]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[178]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[184]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[185]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[191]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[198]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    }
+  ]
+}

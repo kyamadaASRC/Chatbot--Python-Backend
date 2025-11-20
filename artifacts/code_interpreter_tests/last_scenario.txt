@@ -1,0 +1,80 @@
+
+You are running a bench test to confirm Code Interpreter can fill the Limiting Competition templates directly.
+
+Intake selections:
+- Vehicle/Part: Part 15 (open market) J&A
+- Version: Regular (not brand-name, not bridge)
+- Grounds: Only One Responsible Source (10 U.S.C. 3204(a)(1); FAR 6.302-1)
+
+Mission summary:
+Project VIGIL TEMPO requires sustainment of the SENTINEL FUSION NODE, a classified cross-domain analytics environment that ingests streaming sensor feeds from CENTCOM and EUCOM, fuses them with HUMINT/SIGINT holdings, and delivers decision-quality alerts to forward-deployed MDTFs. The node is hosted at Rock Island with reach-back to CONUS data centers.
+
+Contract action description:
+- Customer: Program Manager, Multi-Domain Sensor Integration (PMSI)
+- Action: New firm-fixed-price contract W52P1J-25-C-0038 with Aurora Defense Analytics LLC (CAGE 7K6R1)
+- Period of performance: Base 1 Apr 2025 – 31 Mar 2026 plus two 6-month options (1 Apr 2026 – 30 Sep 2027)
+- Estimated value: $32.4M base + $10.4M options = $42.8M total
+- Funds: FY25 OMA (57 2040) and a small Procurement, Army (21 2031) line for gateway hardware refresh
+- Award target: 15 Feb 2025 so the team can conduct a 45-day transition overlap before the current contract ends on 31 Mar 2025.
+
+Incumbent and background:
+- Current contract W52P1J-21-C-0045 with Aurora Defense Analytics LLC expires 31 Mar 2025 after a competed task order in 2021. The incumbent owns the SENTINEL analytics runtime, custom cross-domain connectors that passed the Unified Cross Domain Services Management Office (UCDSMO) lab, and the machine-learning workflows approved by Army Cyber Command.
+- Government holds Government Purpose Rights to the training data but does not possess the source code for the analytics engine or the streaming connectors. Recompeting before FY26 would require a 12-15 month recertification of all releasability and cyber accreditations, leaving a coverage gap for MDTF operations.
+
+Why only one source now:
+1. Aurora is the only vendor with ATO/ATC to operate SENTINEL across all three connected security domains. Any new vendor would have to rebuild the controlled cross-domain guards, re-ingest 27 PB of curated mission data, and retrain 134 ML workflows, which the accrediting authorities estimate at 14–18 months.
+2. The new JV-run Mission Data Cloud is still rolling out in FY25. Aurora’s code already includes the adapters and the DISA-approved zero trust stack. Rebuilding this stack would mean duplicative costs ($18M hardware, $11M labor) and lost ISR coverage.
+3. OSD has directed no coverage gap for MDTF flash alerts. A lapse would force manual triage and degrade kill-chain timelines by 38 minutes per event per G3 briefing on 18 Nov 2024.
+
+Urgency/Need-by:
+- Need continuous coverage starting 1 Apr 2025; Army G-3/5/7 validated on 6 Dec 2024 that any break in SENTINEL surpasses the acceptable risk threshold for INDOPACOM exercises.
+
+Market research highlights:
+- 15 Oct 2024: Sources-sought on SAM.gov (Notice W52P1J-24-RFI-0931). Responses from Aurora Defense Analytics; Celerity Cyber Solutions; IronBridge DataWorks; Northwind Mission Systems.
+- 05 Nov 2024: One-on-one technical interchange with Northwind. They lacked an accredited cross-domain guard and estimated 18 months to rebuild connectors.
+- 18 Nov 2024: SSI/TS facility visit by Celerity. They confirmed they could provide cleared staff but would need Aurora’s proprietary data schemas and ML playbooks to hit timelines.
+- 02 Dec 2024: Request for Information to DISA Cross Domain PMO confirmed Aurora is the only vendor with an active Interim Authorization to Test for SENTINEL-class workloads.
+- Result: Only Aurora can meet the FY25 need-by date. Other sources could compete on the recompete if given data packages and more than a year for accreditation.
+
+Small business coordination:
+- PROCUREMENT COORDINATION RECORD (DD 2579) routed to PCR Ms. Heather Talbot on 01 Dec 2024. PCR concurred with using full-and-open with J&A so long as recompete milestones are published. SBS also confirmed no SB could prime while security approvals remain proprietary to Aurora.
+
+Price reasonableness:
+- IGCE prepared by PMSI cost team on 17 Oct 2024 totaling $43.2M (labor $34.3M; hardware refresh $8.9M).
+- Aurora’s ROM proposal $42.8M is within 1% of IGCE. Rates track with prior contract W52P1J-21-C-0045 option year 3 with a 3.1% escalation using FY25 OSD inflation indices. Cost/price analyst will complete a cost realism memo using certified payroll data already on file.
+
+Future competition plan (actions to increase competition):
+- Feb 2025: Negotiate expanded Government Purpose Rights to the analytics workflows and award the bridge FFP contract (complete at award).
+- Apr 2025: Kick off data package scrub so releasable training data, interface control documents, and zero-trust configs can be posted to prospective offerors (POC: PMSI Data Rights IPT).
+- Jul 2025: Release DRAFT RFP W52P1J-26-R-7001 with competitive range entry criteria.
+- Oct 2025: Issue FINAL RFP with full 30-day proposal window; include Section H requirement for government-owned data pipelines.
+- Feb 2026: Award competitive follow-on with at least two offerors evaluated. Target competitive PoP start 1 Apr 2026.
+
+Sources considered (for the 09c table):
+- Aurora Defense Analytics LLC – Provided complete SENTINEL sustainment capability; validated cross-domain guards and ML workflows; only source that can meet 1 Apr 2025 need date.
+- Celerity Cyber Solutions – Provided cleared staff augmentations but lacked proprietary adapters; would need 14 months to rebuild connectors.
+- IronBridge DataWorks – Offered to migrate analytics into their ForgeLake platform; no Authority to Operate for TS/SCI cross-domain traffic.
+- Northwind Mission Systems – Built similar system for SOCOM but lacks Government Purpose Rights to SENTINEL data; needs 18 months for accreditation.
+
+Posting/approval constraints:
+- Estimated dollar value < $100M so ACC-RI Competition Advocate approval level applies.
+- J&A must be posted to SAM.gov redacted version within 14 days of award IAW FAR 6.305.
+- Classification: Controlled Unclassified (CUI) but includes mission-sensitive data; redactions will remove specific kill-chain references and admin PII.
+
+Contacts for signature blocks (PN = phone number):
+- Prepared by: CPT Jordan Myers, Lead Contract Specialist, PN 309-782-1184, jordan.a.myers3.mil@army.mil
+- Contracting Officer: LTC Denise Albright, Senior Contracting Officer, PN 309-782-6621, denise.m.albright.mil@army.mil
+- Technical: Dr. Priya Banerjee, Chief Engineer, PN 703-545-2199, priya.banerjee.civ@army.mil
+- Requirements: Ms. Carla Ramos, PMSI Director, PN 703-692-7710, carla.ramos.civ@army.mil
+- Program Manager: COL Martin Reese, PN 703-555-0112
+- Program Executive Officer: MG Alicia Trent, PN 703-555-0192
+- Legal Advisor: Mr. Brian Cole, PN 309-782-4400
+- Competition Advocate: Dr. Evelyn Ward, PN 703-695-2010
+- Chief Counsel: Mr. Rafael Mendez, PN 309-782-3001
+
+Directions for Code Interpreter:
+- Load the attached file "FAR_Parts_ 6_And_13.5_J_And_A_MANDATORY_v3.docx".
+- Preserve banners, headers/footers, numbering, and signature blocks.
+- Replace every "Insert ..." instruction with the concrete data above. Expand numbered sections 1–10 with narrative paragraphs that cite FAR 6.302-1, mission impacts, market research evidence, pricing, and future competition plan.
+- Save the output as "2025-02-15 – Sentinel Fusion Node J&A.docx" and attach it.
+- Provide a short textual summary plus a Deliverables list referencing that filename.

@@ -13,7 +13,7 @@ from app.openai_client import client
 
 RouterMode = Literal["direct", "single", "parallel"]
 
-ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-4.1-mini")
+ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-5")
 ROUTER_SYSTEM_PROMPT = """You route acquisition-related questions to specialized virtual consultants.
 Input payloads contain:
 - `question`: the latest user request,

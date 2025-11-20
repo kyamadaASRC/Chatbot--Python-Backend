@@ -1,0 +1,116 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_16_Brand_Name_JEFO_MANDATORY_v3.docx",
+  "placeholder_count": 22,
+  "placeholders": [
+    {
+      "location": "paragraph[9]",
+      "text": "Prepared by: \t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[10]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[13]",
+      "text": "Contracting Officer:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[17]",
+      "text": "Technical:\t\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[18]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[21]",
+      "text": "Requirements:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[22]",
+      "text": "Insert Title",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[33]",
+      "text": "Program Manager:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[37]",
+      "text": "Program Executive \tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[41]",
+      "text": "Legal Advisor:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[45]",
+      "text": "Competition Advocate:\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[50]",
+      "text": "Chief Counsel:\t\tInsert Name\t\t\t\t\tPN:",
+      "context": "Normal"
+    },
+    {
+      "location": "paragraph[69]",
+      "text": "2. Description of Action:  Insert customer\u2019s office (e.g., The Logistics Modernization Program Project Office) requests a type of contract (e.g., firm-fixed-price, cost reimbursement, etc.) task order, delivery order or modification to an order with contractor name.  ACC-RI will execute this action against contract XXXXXX.  ACC-RI projects award for Month 20YY and fiscal year 20YY, funds type (e.g., Operations and Maintenance, Army or Other Procurement, Army) funds will be used.  An acquisition plan is not required because this procurement does not meet the threshold at Defense Federal Acquisition Regulation Supplement 207.103(d)(i)(B).  OR An acquisition plan is not required in accordance with (IAW) Defense Federal Acquisition Regulation Supplement 207.103(e) because this acquisition is included in the XXXX (e.g., LOGCAP) program level acquisition plan.  OR Approval authority title approved an acquisition plan In Accordance With (IAW) DFARS 207.103(d)(i)(B) on date. OR The required acquisition plan In Accordance With (IAW) DFARS 207.103(d)(i)(B) is currently awaiting approval authority title approval.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[72]",
+      "text": "3. Description of Supplies/Services:  Describe the services or item(s) to be acquired. Include quantities of supplies or provide the period of performance for services.  The period of performance is DD Month 20YY through DD Month 20YY.  The proposed action will not include an option provision.  OR The proposed action will include X months or year or XX% evaluated option(s).  Insert estimator title or organization estimates a dollar value of $x,xxx,xxx including options, based on input the basis of the estimate, for example the Independent Government Estimate.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[74]",
+      "text": "4. Authority Cited:  FAR 16.505(b)(2)(i)(B) and FAR 16.505(a)(4).  The supplies or services to be ordered are unique or highly specialized by brand name.  However, more than awardee under the insert the applicable contract (e.g., CHESS ITES 2H) contract is capable of providing the supplies or services required at the level of quality required.  Thus, competition will be restricted to insert the applicable contract (e.g., CHESS ITES 2H) contract holders that can quote insert the applicable brand name (e.g., Dell) products.",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[106]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[107]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[113]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[114]",
+      "text": "Insert Title",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[120]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    },
+    {
+      "location": "paragraph[127]",
+      "text": "Insert Name",
+      "context": "Normal (Web)"
+    }
+  ]
+}

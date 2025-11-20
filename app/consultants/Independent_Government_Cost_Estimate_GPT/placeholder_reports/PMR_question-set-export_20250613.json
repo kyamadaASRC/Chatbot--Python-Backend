@@ -1,0 +1,11 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/PMR_question-set-export_20250613.xlsx",
+  "placeholder_count": 1,
+  "placeholders": [
+    {
+      "sheet": "Question Set",
+      "cell": "G8",
+      "value": "When required did the Contracting Officer insert the clause at FAR 52.203-13 (Contractor Code of Business Ethics and Conduct) in accordance with the prescription at FAR 3.1004(a)?"
+    }
+  ]
+}

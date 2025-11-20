@@ -1,0 +1,41 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/SSA Endorsement Template SCO to DASA(P)_MANDATORY.docx",
+  "placeholder_count": 7,
+  "placeholders": [
+    {
+      "location": "paragraph[5]",
+      "text": "SUBJECT:  Request for Appointment of Source Selection Authority (SSA), [INSERT NAME OF PROGRAM OR ACQUITION], [INSERT SOLICITATION NUMBER]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[8]",
+      "text": "1.  Request the Deputy Assistant Secretary of the Army sign the attached SSA Appointment Letter for [INSERT NAME OF SSA APPOINTEE].",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[12]",
+      "text": "a.  [INSERT NAME OF REQUIRING ACTIVITY] has a requirement for [INSERT DESCRIPTION OF REQUIRMENT].  The Government will use formal source selection procedures for this acquisition.  The contract will consist of [INSERT BASIC AND OPTION QUANTITIES OR TERM].  This contract will be [INSERT CONTRACT TYPE(S)].  The total estimated value of the acquisition is [INSERT DOLLAR VALUE].",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[14]",
+      "text": "b.  [INSERT NAME OF SSA APPOINTEE] has agreed to be the SSA for the subject procurement.  Army Contracting Command \u2013 Rock Island supports [INSERT HIS/HER] appointment as SSA.  [INSERT INFORMATION REGARDING SSA APPOINTEE\u2019S QUALIFICATIONS/REASON FOR SELECTION].  [INSERT NAME OF SSA APPOINTEE]\u2019s exceptional qualifications, as indicated on the attached biography, make [INSERT HIM/HER] the best and most qualified candidate.  [INSERT NAME OF SSA APPOINTEE] received the required Ethics/Standards of Conduct briefing on [INSERT DATE].  The Ethics Advisor has reviewed [INSERT NAME OF SSA APPOINTEE]\u2019s financial disclosure report, [INSERT OGE 450 OR SF 278, AS APPROPRIATE], and has concluded that this candidate has no financial or other conflict of interest with any of the potential offerors.",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[18]",
+      "text": "3.  Recommendation:  I concur with the proposed appointment of [INSERT NAME OF SSA APPOINTEE] and recommend the approval of DASA(P).",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[23]",
+      "text": "[INSERT SCO SIGNATURE BLOCK]",
+      "context": "No Spacing"
+    },
+    {
+      "location": "paragraph[26]",
+      "text": "2.  Biography of [INSERT NAME OF SSA APPOINTEE]",
+      "context": "No Spacing"
+    }
+  ]
+}

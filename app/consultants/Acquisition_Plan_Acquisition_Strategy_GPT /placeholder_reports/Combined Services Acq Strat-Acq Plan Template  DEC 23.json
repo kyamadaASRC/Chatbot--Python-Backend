@@ -1,0 +1,11 @@
+{
+  "template": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /Combined Services Acq Strat-Acq Plan Template  DEC 23.docx",
+  "placeholder_count": 1,
+  "placeholders": [
+    {
+      "location": "paragraph[72]",
+      "text": "(j)  Service Contract Reporting (SCR). (Is there a requirement to report Contractor Manpower in this acquisition? If so, ensure the requirement is contained in the statement of work/scope of services/performance work statement. When applicable, IAW FAR 4.1705, insert clauses 52.204-14 or 52.204-15.)",
+      "context": "Body Text"
+    }
+  ]
+}
