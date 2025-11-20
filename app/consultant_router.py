@@ -13,7 +13,9 @@ from app.openai_client import client
 
 RouterMode = Literal["direct", "single", "parallel"]
 
+# Use the dedicated router model when provided; fall back to the chat model so previews still work in dev.
 ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-5")
+# System prompt that forces JSON output so the router decision can be parsed deterministically.
 ROUTER_SYSTEM_PROMPT = """You route acquisition-related questions to specialized virtual consultants.
 Input payloads contain:
 - `question`: the latest user request,
@@ -54,7 +56,7 @@ def _build_catalog() -> List[Dict[str, Any]]:
     return catalog
 
 
-# Cache the catalog when the module loads so each router call only sends a lightweight payload.
+# Cache the consultant descriptors at import time so each router call avoids rebuilding the list.
 ROUTER_CATALOG = _build_catalog()
 
 

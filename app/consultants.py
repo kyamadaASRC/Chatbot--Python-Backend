@@ -9,11 +9,13 @@ from typing import Any, Dict, List, Optional
 
 from app.openai_client import client
 
+# Default models each consultant tries (in order) when their metadata doesn't override.
 DEFAULT_MODELS = ["gpt-5", "gpt-4.1"]
 BASE_DIR = Path(__file__).resolve().parent
 CONSULTANTS_ROOT = BASE_DIR / "consultants"
 VECTOR_CACHE_PATH = CONSULTANTS_ROOT / "vector_store_cache.json"
 OVERVIEW_PATH = CONSULTANTS_ROOT / "overview.md"
+# Fallback persona text used when a consultant folder is missing explicit instructions.
 DEFAULT_INSTRUCTION_TEXT = "You are the Agent_iWant_GPT assistant."
 
 
@@ -208,6 +210,7 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
             instructions = instruction_path.read_text(encoding="utf-8").strip()
         else:
             instructions = metadata.get("instructions", DEFAULT_INSTRUCTION_TEXT)
+        # Append shared template-handling guidance so every consultant edits DOCX/XLSX files safely.
         instructions += (
             "\n\nTEMPLATE PLACEHOLDER HANDLING\n"
             "Before editing any uploaded DOCX/XLSX template, load the matching JSON report "
@@ -224,6 +227,7 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
 
         display_name = metadata.get("display_name") or directory.name
         aliases = metadata.get("aliases") or []
+        # Seed aliases with common permutations so router + UI search can match casual references.
         alias_candidates = {
             key,
             key.replace("_", " "),
@@ -234,6 +238,7 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
 
         summary = metadata.get("summary")
         if not summary:
+            # Fall back to the first non-empty instruction line so lists look reasonable in the UI.
             lines = [line.strip() for line in instructions.splitlines() if line.strip()]
             summary = lines[0] if lines else ""
         registry[key] = {
@@ -288,6 +293,7 @@ if not CONSULTANTS:
             "keywords": [],
         }
     }
+# Ensure at least one persona exists so the app still works on first boot or test environments.
 
 # Build consultant vector stores up front so the first incoming request is fast.
 _initialize_vector_stores(CONSULTANTS)
@@ -339,6 +345,7 @@ def run_consultant_response(
     models = meta.get("model_try") or DEFAULT_MODELS
     base_tools = list(meta.get("tools", []) or [])
 
+    # Clone the consultant's tool list so we can inject the caller's session resources without mutating metadata.
     request_tools = []
     for tool in base_tools:
         t = dict(tool)
@@ -346,6 +353,7 @@ def run_consultant_response(
         if tool_type == "file_search":
             ids = list(t.get("vector_store_ids") or [])
             consultant_vs = meta.get("vector_store_id")
+            # Give the worker access to both the consultant's collateral store and the caller's session store.
             if consultant_vs and consultant_vs not in ids:
                 ids.append(consultant_vs)
             if vector_store_id and vector_store_id not in ids:
@@ -354,6 +362,7 @@ def run_consultant_response(
                 continue
             t["vector_store_ids"] = ids
         if tool_type == "code_interpreter":
+            # Reuse the session's container when available so tool outputs stay grouped together.
             if container_id:
                 t["container"] = container_id
             else:
@@ -361,6 +370,7 @@ def run_consultant_response(
         request_tools.append(t)
 
     last_err: Optional[Exception] = None
+    # Try each preferred model in order until one succeeds.
     for model in models:
         try:
             print(
@@ -374,6 +384,7 @@ def run_consultant_response(
                 ],
                 tools=request_tools or None,
             )
+            # Capture the raw SDK object for debugging/telemetry on the frontend.
             serialized = _response_to_dict(resp)
             text_out = getattr(resp, "output_text", "") or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
@@ -395,4 +406,5 @@ def run_consultant_response(
 
     if last_err:
         raise last_err
+    # Should be unreachable, but gives clearer tracebacks if models list was empty.
     raise RuntimeError("Consultant execution failed without exception context")

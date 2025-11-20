@@ -84,6 +84,7 @@ def _link_files_to_vector_store(
     for file_id in file_ids:
         if not file_id:
             continue
+        # Link each generated file to the caller's vector store so future file_search calls can see it.
         try:
             client.vector_stores.files.create(vector_store_id=vector_store_id, file_id=file_id)
         except Exception as exc:
@@ -111,6 +112,7 @@ def _link_files_to_vector_store(
 def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, Any]:
     """Build the metadata object that the UI expects for downloadable files."""
     try:
+        # Grab file info from OpenAI so filenames + sizes stay accurate when the UI renders them.
         meta = client.files.retrieve(file_id)
         data = _ensure_dict(meta)
     except Exception:
@@ -139,6 +141,7 @@ def _sanitize_filename(name: Optional[str], suffix: str) -> str:
 
 def _make_temp_path(suffix: str) -> Path:
     """Create a temporary file path for DOCX/XLSX generation."""
+    # Use NamedTemporaryFile so downstream libraries can write directly to disk.
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     temp_path = Path(temp.name)
     temp.close()
@@ -149,6 +152,7 @@ def _upload_generated_file(path: Path, filename: str, mimetype: str = "applicati
     """Upload a server-generated artifact to OpenAI Files and clean up the temp file."""
     try:
         with path.open("rb") as handle:
+            # Treat the generated doc as if the user uploaded it so vector stores/containers can reuse the same APIs.
             uploaded = client.files.create(
                 file=(filename, handle, mimetype),
                 purpose="assistants",
@@ -190,6 +194,7 @@ def _handle_generate_docx_tool(args: Dict[str, Any], vector_store_id: Optional[s
         return []
     filename = _sanitize_filename(args.get("filename"), ".docx")
     document = Document()
+    # Render each Markdown line into basic DOCX structures so consultants can call a single helper.
     _markdown_to_docx(document, markdown_text)
     temp_path = _make_temp_path(".docx")
     document.save(temp_path) # type: ignore
@@ -217,6 +222,7 @@ def _handle_generate_xlsx_tool(args: Dict[str, Any], vector_store_id: Optional[s
     for sheet_def in sheets:
         if not isinstance(sheet_def, dict):
             continue
+        # Create one worksheet per descriptor and stream rows into openpyxl.
         title = (sheet_def.get("name") or "Sheet").strip() or "Sheet"
         sheet_rows = sheet_def.get("rows") or []
         ws = wb.active if first_sheet else wb.create_sheet()
@@ -329,7 +335,7 @@ def _build_consultant_tool_specs() -> List[Dict[str, Any]]:
     return specs
 
 
-CONSULTANT_TOOL_SPECS = _build_consultant_tool_specs()
+CONSULTANT_TOOL_SPECS = _build_consultant_tool_specs()  # Cache tool schemas once so every request reuses the same payload.
 
 
 def _extract_consultant_tool_calls(outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -358,6 +364,7 @@ def _extract_consultant_tool_calls(outputs: List[Dict[str, Any]]) -> List[Dict[s
 
 
 def create_app() -> Flask:
+    """Application factory so tests and gunicorn can import the same Flask instance."""
     app = Flask(__name__)
     CORS(app)  # enable CORS for all routes
     global _TOOL_LOGGED
@@ -678,6 +685,7 @@ def create_app() -> Flask:
         incoming_tools = data.get("tools")
         router_payload = data.get("router_decision")
         history_payload = data.get("history")
+        # The general assistant needs the recent transcript so pronouns like "this" resolve before tool calls fire.
         history_messages = _normalize_history_for_model(history_payload)
         if not msg:
             return jsonify({"error": "Missing message"}), 400
@@ -696,6 +704,7 @@ def create_app() -> Flask:
             forced_direct = _should_force_direct(msg)
             if forced_direct:
                 router_decision = RouterDecision(mode="direct", reason="forced_direct_tool_request")
+                _log_progress(progress_log, "forced_direct", trigger="tool_request")
             else:
                 router_decision = RouterDecision.from_dict(router_payload)
                 if not router_decision:
@@ -720,8 +729,23 @@ def create_app() -> Flask:
                 except Exception as exc:
                     return jsonify({"error": str(exc)}), 500
 
+        # When a specific consultant is selected (router or explicit), run that persona immediately.
         if consultant_key:
             try:
+                if router_decision and router_decision.mode == "single":
+                    _log_progress(
+                        progress_log,
+                        "consultant_selected",
+                        consultant=consultant_key,
+                        reason=router_decision.reason,
+                    )
+                elif requested_consultant:
+                    _log_progress(
+                        progress_log,
+                        "consultant_selected",
+                        consultant=consultant_key,
+                        reason="user_override",
+                    )
                 payload = _consultant_tool_call(
                     msg,
                     project,
@@ -743,6 +767,7 @@ def create_app() -> Flask:
                     if not isinstance(tool, dict):
                         continue
                     sanitized = dict(tool)
+                    # Ensure the session's container ID is passed through so code interpreter calls stay sticky.
                     if sanitized.get("type") == "code_interpreter":
                         if container_id:
                             sanitized["container"] = container_id
@@ -751,6 +776,7 @@ def create_app() -> Flask:
                     tools.append(sanitized)
 
             if vector_store_id:
+                # Prepend file_search so the assistant can reference session uploads even in direct mode.
                 has_file_search = any(
                     isinstance(tool, dict) and tool.get("type") == "file_search"
                     for tool in tools
@@ -758,6 +784,7 @@ def create_app() -> Flask:
                 if not has_file_search:
                     tools.insert(0, {"type": "file_search", "vector_store_ids": [vector_store_id]})
 
+            # Surface every consultant as a callable function tool so the general model can delegate mid-conversation.
             for spec in CONSULTANT_TOOL_SPECS:
                 tools.append(copy.deepcopy(spec))
 
@@ -768,12 +795,13 @@ def create_app() -> Flask:
             convo_input.append({"role": "user", "content": msg})
             resp = client.responses.create(
                 model=CHAT_MODEL,
-                input=convo_input,
+                input=convo_input, #type: ignore
                 tools=tools or None, # type: ignore
             )
             serialized = _ensure_dict(resp)
             consultant_calls = _extract_consultant_tool_calls(serialized.get("output") or [])
             if consultant_calls:
+                # Execute only the first consultant tool request; follow-up calls will be handled by the next round trip.
                 primary = consultant_calls[0]
                 if len(consultant_calls) > 1:
                     print(f"[consultant-tools] Multiple consultant tool calls detected; executing {primary['tool_name']} first.")
@@ -792,6 +820,12 @@ def create_app() -> Flask:
                 delegated_vector_store = args.get("vector_store_id") or vector_store_id
                 delegated_container = args.get("container_id") or container_id
                 try:
+                    _log_progress(
+                        progress_log,
+                        "consultant_tool_delegate",
+                        tool=primary["tool_name"],
+                        consultant=primary["consultant_key"],
+                    )
                     payload = _consultant_tool_call(
                         delegated_question,
                         project,
@@ -811,7 +845,7 @@ def create_app() -> Flask:
             generated_files = []
             generated_files.extend(_process_server_tool_calls(serialized, vector_store_id))
             generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
-            _log_progress(progress_log, "direct")
+            _log_progress(progress_log, "direct", model=CHAT_MODEL, delegated=False)
             return jsonify({
                 "text": text,
                 "mode": "direct",

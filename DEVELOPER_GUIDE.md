@@ -122,7 +122,14 @@ Data flow:
 2. `/v1/router/preview` exposes that decision to the frontend so it can show toast notifications (“Routing…”, “Calling 3 consultants…”) before the actual `/chat` request fires.
 3. When `/chat` receives a router payload with `mode: "single"`, `_consultant_tool_call()` runs exactly one consultant (same behavior as before but now instrumented with progress logs). When `mode: "parallel"`, `_run_parallel_consultants()` fans out with a `ThreadPoolExecutor`, collects each consultant’s notes/files, and then `_summarize_consultant_results()` feeds everything back through `CHAT_MODEL` with `PARALLEL_SUMMARY_SYSTEM` to produce a merged response.
 4. Router metadata plus a chronological `progress_log` array are returned to the browser so the UI can reflect each stage; failures per consultant are captured in `failures[]` without aborting the entire request when at least one agent succeeds.
-5. If the caller specifies `consultant_key` explicitly (e.g., via dropdown), the router is bypassed and `/chat` acts exactly like the legacy keyword matcher.
+5. If the caller specifies `consultant_key` explicitly (e.g., via dropdown), the router is bypassed; otherwise there is no keyword/alias fallback—the general assistant is the only path into consultants unless the router selected them.
+
+### 5.2 Consultant delegation via tool calls
+
+- Every consultant is exposed to the general chat model as a function tool named `call_<consultant_key>`. The tool description summarizes when that specialist should be invoked.
+- When the router chooses `mode: "single"` or `mode: "parallel"`, `_consultant_tool_call()` or `_run_parallel_consultants()` execute the consultants immediately. When the router returns `mode: "direct"`, the general system prompt reminds the model that it may still call any consultant tool if their scope fits better than answering directly.
+- `/chat` inspects the Responses payload for consultant tool calls. The first tool call is executed server-side via `_consultant_tool_call()`, and the resulting payload is returned with `triggered_tool`/`triggered_by_general_model` metadata so the UI can display accurate toasts.
+- Because delegation now goes through function tools, the legacy `_match_consultant_alias` keyword shim was removed. Consultant `aliases`/`keywords` remain important—they improve routing accuracy and UI search—but they no longer force execution on their own.
 
 ### 5.3 REST surface area
 
@@ -199,7 +206,7 @@ Data flow:
 
 1. User submits a prompt → `main.js` disables inputs, renders the user bubble, and calls `chatClient.sendMessage()`.
 2. `ChatClient` fetches `/chat` with the session’s `vector_store_id` and `container_id`.
-3. The backend either routes to a consultant or to the general assistant and returns JSON describing the response/tool stream.
+3. The backend either routes to a consultant or to the general assistant. Even in the direct path, the model can emit `call_<consultant>` tool invocations, which the backend fulfills by running that consultant and returning the results.
 4. `main.js` renders the assistant text, inspects `output` for tool calls (e.g., `generate_pdf`), invokes utilities, and, when a PDF blob is returned, hands it to `FileManager` so it’s uploaded/linked automatically.
 5. `ChatSessionManager` updates local history and triggers auto title summarization through `/v1/responses`.
 
