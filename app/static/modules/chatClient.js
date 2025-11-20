@@ -1,9 +1,10 @@
-// chatClient.js
+// chatClient.js centralizes how we build payloads for the Flask `/chat` route and post-process responses.
 import { renderMarkdownPDFDownload } from "./utils.js";
-import { showToast, dismissToast } from "./ui.js";
+import { showToast } from "./ui.js";
 
 export class ChatClient {
   constructor(apiKey, model, sessionManager) {
+    // API key/model are injected by the server; sessionManager provides IDs for vector stores/containers.
     this.apiKey = apiKey;
     this.model = model;
     this.sessionManager = sessionManager;
@@ -162,8 +163,7 @@ export class ChatClient {
     // Note: Some API variants reject unknown params; omit tool_resources.
 
     // console.log("Sending payload (history msgs:", historyMsgs.length, "):", JSON.stringify(payload, null, 2)); // Debug
-    const pendingToast = showToast("Contacting OpenAI…", "info", 0);
-
+    // Backend `/chat` handles routing + tool execution so the browser only makes this single request.
     const res = await fetch("/chat", {
       method: "POST",
       headers: {
@@ -184,7 +184,6 @@ export class ChatClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error("OpenAI API error:", err);
-      dismissToast(pendingToast);
       showToast(err?.error?.message || "OpenAI API error", "error", 5000);
       throw new Error(err?.error?.message || "Unknown API error.");
     }
@@ -192,7 +191,6 @@ export class ChatClient {
     const data = await res.json();
   
     console.log("OpenAI Response Data:", data);
-    dismissToast(pendingToast);
     showToast("Response received", "success", 1200);
 
     // Extract assistant text robustly from the response

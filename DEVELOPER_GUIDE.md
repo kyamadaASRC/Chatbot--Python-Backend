@@ -18,6 +18,14 @@ Data flow:
 3. `/chat` receives the message, auto-selects an appropriate consultant (if keywords match) or falls back to a general chat model, then calls OpenAI (`app/app.py:163-205`).
 4. The browser renders the assistant response, handles tool calls such as `generate_pdf`, and updates session history (`main.js`, `chatClient.js`).
 
+### Intern quick-start checklist
+
+1. **Clone + bootstrap** – Follow §3 verbatim. If something fails, paste the traceback into the team channel so we can update this guide.
+2. **Smoke test the UI** – Use §4 to bring up the server, then confirm “New Chat” creates a session and router preview toasts appear when you type.
+3. **Trace a prompt end-to-end** – Run `flask --app app.app routes` to list endpoints, set a breakpoint in `/chat`, send a prompt, and step through so you see how router + consultants interact.
+4. **Read a consultant folder** – Pick any folder under `app/consultants`, skim `metadata.json` + instructions, then inspect the files that get uploaded. This mental model helps when debugging routing.
+5. **Ask “why” twice** – Any time you touch code, identify the entry point that calls your change and the exit point it influences. Note both in your pull request so reviewers can follow your thinking.
+
 ---
 
 ## 2. Repository Tour
@@ -210,6 +218,9 @@ Data flow:
 - **File preview issues** – Most previews rely on `URL.createObjectURL`. If you refresh the page, revoke stale blob URLs or re-upload.
 - **Cross-origin requests** – When serving the UI externally (e.g., VS Code Live Server), keep it on `127.0.0.1:5501` or update the `CORS` config near the bottom of `app/app.py`.
 - **PDF generation errors** – `renderMarkdownPDFDownload()` depends on pdfmake/html-to-pdfmake/jsPDF scripts loaded in the template. If those CDNs fail, the fallback will still attempt jsPDF but logs warnings in the console (`static/modules/utils.js:34-163`).
+- **Router sanity check** – Run `flask shell` and call `from app.consultant_router import route_consultants; route_consultants("Need an IGCE for cloud work?")` to see which consultant the LLM chooses without involving the UI.
+- **Trace tool calls** – Tail the Flask log while triggering PDF/DOCX/XLSX generation; each helper prints `[files]` or `[vector-store]` log lines when uploads/linking succeed.
+- **Know when to mock** – When tests cannot touch the OpenAI API, patch `app.openai_client.client` with a stub that records calls. The helper functions in `app/app.py` accept raw dicts, so your fake only needs `.responses.create()` and `.files.create()` minimal behavior.
 
 ---
 
@@ -231,5 +242,17 @@ Data flow:
 5. **Testing ideas**
    - Mock OpenAI by swapping `app/openai_client.client` with a fake during unit tests.
    - Add Cypress-style smoke tests around the frontend once it is hosted behind an HTTP server.
+
+---
+
+## 11. Glossary & acronyms
+
+| Term | Meaning |
+| --- | --- |
+| **Consultant** | A persona folder under `app/consultants/` that owns a prompt, keywords, and resource files. |
+| **Vector store** | Dense retrieval index hosted by OpenAI. Each chat session gets its own store, and each consultant has a pre-seeded store of reference docs. |
+| **Container / code interpreter** | OpenAI’s sandbox runtime for running Python. We provision one lazily per chat session. |
+| **Router** | The LLM prompt in `consultant_router.py` that decides whether to run the general assistant, one consultant, or multiple consultants in parallel. |
+| **Tool call** | OpenAI Responses feature that lets a model request `generate_pdf`, `generate_docx`, `generate_xlsx`, or `file_search`. Backend helpers satisfy the request and feed the resulting file IDs back into the session. |
 
 Welcome aboard! Tweak this guide as the stack evolves so the next intern can ramp up even faster.

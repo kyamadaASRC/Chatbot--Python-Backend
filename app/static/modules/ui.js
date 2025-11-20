@@ -1,4 +1,4 @@
-// modules/ui.js
+// modules/ui.js centralizes DOM rendering helpers for chat messages, sessions, and toasts.
 // Clean model/user text to remove stray tokens and private-use glyphs
 function collapseSpacedOutWords(str) {
   try {
@@ -149,9 +149,7 @@ export function showToast(message, type = 'info', dismissAfterMs = 4000) {
 }
 
 export function showSpinnerToast(message) {
-  const toast = showToast("", "info", 0);
-  toast.innerHTML = `<span class="spinner" style="margin-right:8px"><div class="dot"></div><div class="dot"></div><div class="dot"></div></span>${message}`;
-  return toast;
+  return showToast(message, "info", 0);
 }
 
 export function dismissToast(toastEl) {
@@ -179,6 +177,7 @@ export function renderSessionMessages(sessionData) {
     // renderSystemMessage(`🧠 Active Vector Store: ${sessionData.vector_store_id || "none"}`);
 }
 
+// Build the sidebar DOM element for a chat session, including menu markup.
 export function renderSessionItem(session) {
     const session_div = document.createElement("div");
     session_div.className = "chat-session-item";

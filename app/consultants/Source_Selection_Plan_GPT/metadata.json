@@ -2,17 +2,47 @@
   "key": "source_selection_plan_gpt",
   "display_name": "Source Selection Plan GPT",
   "instruction_file": "instructions.txt",
-  "model_try": ["gpt-5", "gpt-4.1"],
-  "summary": "Use provided data to draft a Source Selection Plan",
-  "tools": [
-    {"type": "file_search"},
-    {"type": "web_search_preview"},
-    {"type": "code_interpreter"}
+  "model_try": [
+    "gpt-5",
+    "gpt-4.1"
   ],
-  "aliases": ["source selection plan", "source selection consultant"],
-  "keywords": ["source", "selection"],
-  "conversation_starters" : [
-    "Best Value Tradeoff SSP. Factors: Tech (3 subfactors), Cost/Price, Past Performance, SB Participation. Relative importance: Tech > Past Perf ≈ SB > Price. Build SSP + workpapers and Generate documents as individual files.",
+  "summary": "Produces protest-ready Source Selection Plans (LPTA, tradeoff, HTRO, VATEP, or SSP-lite) plus evaluation worksheets, trace matrices, risk registers, and EN banks aligned to DoD/Army source-selection policy.",
+  "tools": [
+    {
+      "type": "file_search"
+    },
+    {
+      "type": "web_search_preview"
+    },
+    {
+      "type": "code_interpreter"
+    }
+  ],
+  "aliases": [
+    "source selection plan",
+    "source selection consultant",
+    "ssp gpt",
+    "evaluation plan gpt",
+    "lpta plan",
+    "tradeoff plan",
+    "htro ssp",
+    "vatep consultant"
+  ],
+  "keywords": [
+    "source",
+    "selection",
+    "ssp",
+    "lpta",
+    "tradeoff",
+    "htro",
+    "vatep",
+    "evaluation factors",
+    "sseb",
+    "en templates",
+    "risk register"
+  ],
+  "conversation_starters": [
+    "Best Value Tradeoff SSP. Factors: Tech (3 subfactors), Cost/Price, Past Performance, SB Participation. Relative importance: Tech > Past Perf \u2248 SB > Price. Build SSP + workpapers and Generate documents as individual files.",
     "Best Value LPTA SSP. Define clear acceptability criteria tied to PRS/AQLs. Include EN templates and milestone calendar. Generate documents as individual files.",
     "HTRO SSP. Use Best Value Tradeoff Template as a basis and modified as appropriate. ",
     "Part 8/13/16 SSP-Lite"

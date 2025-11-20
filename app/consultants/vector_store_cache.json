@@ -1,16 +1,6 @@
 {
-  "industry_feedback_gpt": {
-    "vector_store_id": "vs_6914dc7b84c08191a512d9a525022980",
-    "file_signature": [
-      {
-        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Industry_Feedback_GPT/instructions.txt",
-        "size": 5602,
-        "mtime_ns": 1762972658486454550
-      }
-    ]
-  },
   "acquisition_plan_acquisition_strategy_gpt": {
-    "vector_store_id": "vs_691c937207c88191b11f84c7793f124a",
+    "vector_store_id": "vs_691cb005b6ac8191a2fefb43d3c3333b",
     "file_signature": [
       {
         "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /ACC-RSA SAMPL FORMAT CRB Toolkit as of 08 May 2024.docx",
@@ -52,10 +42,44 @@
         "size": 100889,
         "mtime_ns": 1763411243494067015
       }
+    ],
+    "uploaded_files": [
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /ACC-RSA SAMPL FORMAT CRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-YEK7KNCXQxWKeM7QG4Q7pM"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /ACC-RSA SAMPLE FORMAT KO Contract Property Review Checklist (FEB 2025).pdf",
+        "file_id": "file-AnF4Zmh4AqLYZYzTnAzMch"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /ATT 02 ACC-RSA COR File Review Checklist 2025.04.14.pdf",
+        "file_id": "file-RLDS9vP8reFSJDyB3CvEan"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /Abbreviated Acq Strategy (SAT to $50M).pdf",
+        "file_id": "file-4sjE77tBkUZaLtwiqZqu8a"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /Acquisition Plan (AP)  (MAR 23).docx",
+        "file_id": "file-GMzcL1UAcinYQdmHSy7Wtq"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /CSASAP Guidance.docx",
+        "file_id": "file-W1668RwDSCFstV4s7iP8Po"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /Combined Services Acq Strat-Acq Plan Template  DEC 23.docx",
+        "file_id": "file-Bzftg9A15Ht7sF65cudTj1"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Acquisition_Plan_Acquisition_Strategy_GPT /PMR_question-set-export_20250613.xlsx",
+        "file_id": "file-NMTu7oge3dwJ8mz7mv31tg"
+      }
     ]
   },
   "independent_government_cost_estimate_gpt": {
-    "vector_store_id": "vs_691c938a3a008191a1b2950628b6f58d",
+    "vector_store_id": "vs_691cb01bcbbc8191b23303f0bbbca334",
     "file_signature": [
       {
         "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/06_IGCE_Shell.xlsx",
@@ -107,10 +131,52 @@
         "size": 100889,
         "mtime_ns": 1763413260735303500
       }
+    ],
+    "uploaded_files": [
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/06_IGCE_Shell.xlsx",
+        "file_id": "file-CyVVYPTo4s4uGjiTmDrfaM"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/06b_IGE_Narrative_Template.docx",
+        "file_id": "file-EUjacKDrGei4jrqhJ56JQr"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/12Sept2025 DoD_IGCE_for_SA_Handbook.pdf",
+        "file_id": "file-RqHrFqeYieiPoq3vvqjU3R"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/ACC-RSA SAMPL FORMAT CRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-CbrhLEFtw3Z7DxhWPzSaDf"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/ACC-RSA SAMPLE FORMAT KO Contract Property Review Checklist (FEB 2025).pdf",
+        "file_id": "file-7hAz9i9m7eQc3sC8XikNHG"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/ACC-RSA SAMPLE FORMAT SRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-FkDMUrgvwxG8Ts85gCd9MT"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/ATT 02 ACC-RSA COR File Review Checklist 2025.04.14.pdf",
+        "file_id": "file-1trtYQ2bHWNwMu8fx3ZwrB"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/IGCE_Intake_Form.docx",
+        "file_id": "file-TjDfJ1uG35CLSpuKYSeo3D"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/IGCE_Workbook_Template_OptionYears_2178.xlsx",
+        "file_id": "file-JNavPYnBsPQWcayhCE3mEc"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Independent_Government_Cost_Estimate_GPT/PMR_question-set-export_20250613.xlsx",
+        "file_id": "file-RxrjzqLXb5jEUrot4o4kpt"
+      }
     ]
   },
   "limiting_competition_gpt": {
-    "vector_store_id": "vs_691c93a3d5bc8191ab0fa4f0e491fb24",
+    "vector_store_id": "vs_691cb047ae5881918cbca7be4cad2563",
     "file_signature": [
       {
         "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC AI with Supplement Links_Aug 2025.pdf",
@@ -202,10 +268,84 @@
         "size": 46091,
         "mtime_ns": 1763480205328272974
       }
+    ],
+    "uploaded_files": [
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC AI with Supplement Links_Aug 2025.pdf",
+        "file_id": "file-EiVyQtEerSNJ8PmZAUkG3t"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC-RI Acquisition Instruction Supplement Rev 14.2_clean.pdf",
+        "file_id": "file-EsNG1f3dxD4syv32GHXSp1"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC-RSA SAMPL FORMAT CRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-5zNo9Qyej8zr3sXRadVZtC"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC-RSA SAMPLE FORMAT KO Contract Property Review Checklist (FEB 2025).pdf",
+        "file_id": "file-WAK46BDCSCxS4o6B6p6NkV"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ACC-RSA SAMPLE FORMAT SRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-3hLaF3zFKVuEuCbiYC7pKS"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/ATT 02 ACC-RSA COR File Review Checklist 2025.04.14.pdf",
+        "file_id": "file-9p12zq9ESYspFFvm9PLCq9"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_16_Brand_Name_JEFO_MANDATORY_v3.docx",
+        "file_id": "file-7KqSCqi4XoaH8msG3YYyJc"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_16_JEFO_Bridge_MANDATORY_v3.docx",
+        "file_id": "file-QXrrVjQZZvomJxphuGc8gz"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_16_JEFO_MANDATORY_v3.docx",
+        "file_id": "file-SPpzUV8wy6o6YHyC5k8EjX"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Part_8_LSJ_MANDATORY_v3.docx",
+        "file_id": "file-2iSQjtxhTmokA5eo8Uii2L"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Parts_ 6_And_13.5_J_And_A_Bridge MANDATORY_v3.docx",
+        "file_id": "file-6rtYZ4hzqASPhQpSzwzpAT"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/FAR_Parts_ 6_And_13.5_J_And_A_MANDATORY_v3.docx",
+        "file_id": "file-2sbwZWsTt2EsdGBG8v19o5"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/Limiting_Competition_Under_$250K_MANDATORY.pdf",
+        "file_id": "file-X4xButnvgFzLVswrXU62zZ"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/MFR-Sources Sought-RFI Waiver FAR 13.501_MANDATORY.docx",
+        "file_id": "file-VgnPYup2XnotbQNaRdoG1t"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/MFR-Sources Sought-RFI Waiver FAR 6.302-1_MANDATORY.docx",
+        "file_id": "file-BKWtw91xtJHaRY28CDtZk9"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/PMR_question-set-export_20250613.xlsx",
+        "file_id": "file-TLCLJbT2p5pj3Tc7Ndkqxa"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/Transmittal Letter  to SPE Template_MANDATORY.docx",
+        "file_id": "file-YTd1gUQUEASKSeA5Qbw74Z"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Limiting_Competition_GPT/UnderSAT.3.html",
+        "file_id": "file-QU9E51Rj6xZzbi111aXH8m"
+      }
     ]
   },
   "source_selection_plan_gpt": {
-    "vector_store_id": "vs_691c93cf8a9c819193d62d82ccb1c66e",
+    "vector_store_id": "vs_691cb07383cc8191b61d60136410cbd2",
     "file_signature": [
       {
         "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/05e_HTRO_Scoring_Matrix.xlsx",
@@ -296,6 +436,80 @@
         "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/USA000740-22-DPC.pdf",
         "size": 1841090,
         "mtime_ns": 1763412396826269873
+      }
+    ],
+    "uploaded_files": [
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/05e_HTRO_Scoring_Matrix.xlsx",
+        "file_id": "file-H1f7cBLzcbGxEQ7zSTzLq3"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/05f_VATEP_Calculator.xlsx",
+        "file_id": "file-8RioVBub873o7ohkUUBxdz"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/ACC-RSA SAMPLE FORMAT KO Contract Property Review Checklist (FEB 2025).pdf",
+        "file_id": "file-2dx1gZZH8CrZ7JMaJtFSAS"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/ACC-RSA SAMPLE FORMAT SRB Toolkit as of 08 May 2024.docx",
+        "file_id": "file-Va8wfLtxGr2SxgBq5qvD2f"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/ATT 02 ACC-RSA COR File Review Checklist 2025.04.14.pdf",
+        "file_id": "file-CTaH9JfNRk8XvAAMjf2icu"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/DF Non Government Advisor_MANDATORY.docx",
+        "file_id": "file-L1UKX4Sb6my1KWzCqTYxTH"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/PMR_question-set-export_20250613.xlsx",
+        "file_id": "file-Nej6HLwWydiKAsSUL3BSoh"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Performance Assessment Questionnaire.docx",
+        "file_id": "file-VzE4QM4ma3uf4BXtYHqFct"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/SSA Appointment Template SCO_MANDATORY.docx",
+        "file_id": "file-DFyYXMuWr25ho31ASCnxSr"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/SSA Endorsement Template SCO to DASA(P)_MANDATORY.docx",
+        "file_id": "file-AHVopM8CfvopJTm7HfFXzC"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Sample Task (MAR 22).docx",
+        "file_id": "file-H3uBATcbGT67iLgzUFz9Fx"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Advisory Council (SSAC) Appointment Letter (MAR 22)).docx",
+        "file_id": "file-5b4Lmd4xsVkmgAGg9MFLYH"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Authority (SSA) Appointment Letter  (MAR 23).docx",
+        "file_id": "file-SuZTeaisRvxKAzFeta5stK"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Evaluation Board (SSEB) Appointment Letter (MAR 22).docx",
+        "file_id": "file-PQ3HSxMjbe4Xy3oUgm12LK"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Evaluation Board (SSEB) Chairperson Appointment Letter  (MAR 22).docx",
+        "file_id": "file-1xgxnQ5NU1vubAqEWojqYy"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Plan - LPTA (JAN 22).docx",
+        "file_id": "file-WnakGQHuf44RZHHxYSR3f2"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/Source Selection Plan - Subjective Tradeoff (DEC 24).docx",
+        "file_id": "file-FZ9TbuTZRnjsj2xaDL9P5E"
+      },
+      {
+        "path": "/Users/kyama95/Developer/Chatbot-Python Backend/app/consultants/Source_Selection_Plan_GPT/USA000740-22-DPC.pdf",
+        "file_id": "file-G1Z2uHijcQRsWibuKPY5VF"
       }
     ]
   }

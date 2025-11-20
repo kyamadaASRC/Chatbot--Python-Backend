@@ -150,7 +150,7 @@ export async function markdownToPDFBlob(markdownText) {
   }
 }
 
-// Add a PDF download button to the last assistant message
+// Add a PDF download button to the last assistant message so interns can spot local-only PDFs quickly.
 export async function renderMarkdownPDFDownload(markdown, containerSelector = "#chat-history") {
   const pdfBlob = await markdownToPDFBlob(markdown);
   const pdfURL = URL.createObjectURL(pdfBlob);

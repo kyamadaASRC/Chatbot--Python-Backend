@@ -18,10 +18,12 @@ DEFAULT_INSTRUCTION_TEXT = "You are the Agent_iWant_GPT assistant."
 
 
 def _slugify(name: str) -> str:
+    """Generate deterministic consultant keys from folder names."""
     return name.lower().replace(" ", "_")
 
 
 def _load_metadata(directory: Path) -> Dict[str, Any]:
+    """Read metadata.json from a consultant folder, returning {} on errors."""
     meta_path = directory / "metadata.json"
     if not meta_path.exists():
         return {}
@@ -32,6 +34,7 @@ def _load_metadata(directory: Path) -> Dict[str, Any]:
 
 
 def _locate_instruction(directory: Path, explicit_name: Optional[str] = None) -> Optional[Path]:
+    """Find the instruction file for a consultant, respecting overrides in metadata."""
     if explicit_name:
         candidate = directory / explicit_name
         if candidate.exists():
@@ -44,6 +47,7 @@ def _locate_instruction(directory: Path, explicit_name: Optional[str] = None) ->
 
 
 def _gather_resource_files(directory: Path, ignore: Optional[List[str]] = None) -> List[str]:
+    """Collect consultant collateral files (templates, rubrics, etc.)."""
     ignore = ignore or []
     resources: List[str] = []
     for item in directory.iterdir():
@@ -56,6 +60,7 @@ def _gather_resource_files(directory: Path, ignore: Optional[List[str]] = None) 
 
 
 def _load_vector_cache() -> Dict[str, Any]:
+    """Read vector_store_cache.json so we can skip re-uploading unchanged files."""
     if not VECTOR_CACHE_PATH.exists():
         return {}
     try:
@@ -65,11 +70,13 @@ def _load_vector_cache() -> Dict[str, Any]:
 
 
 def _save_vector_cache(data: Dict[str, Any]) -> None:
+    """Persist the latest vector store mapping for each consultant."""
     VECTOR_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     VECTOR_CACHE_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def _vector_store_exists(vs_id: str) -> bool:
+    """Confirm that a cached vector store still exists on OpenAI."""
     if not vs_id:
         return False
     retrieve = getattr(client.vector_stores, "retrieve", None)
@@ -84,6 +91,7 @@ def _vector_store_exists(vs_id: str) -> bool:
 
 
 def _file_signature(paths: List[str]) -> List[Dict[str, Any]]:
+    """Generate a cheap hash of file size + mtime so we can detect edits."""
     signature: List[Dict[str, Any]] = []
     for raw_path in sorted(paths):
         p = Path(raw_path)
@@ -123,11 +131,11 @@ def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> List[Dict[str
             print(f"[consultants] Skipping missing file {filepath}")
             continue
         with path.open("rb") as handle:
-            uploaded = client.files.create(
+            file_obj = client.files.create(
                 file=(path.name, handle, "application/octet-stream"),
                 purpose="assistants",
             )
-        file_id = _extract_id(uploaded)
+        file_id = _extract_id(file_obj)
         if not file_id:
             raise RuntimeError(f"Failed to upload file {filepath}: missing id")
         client.vector_stores.files.create(vector_store_id=vs_id, file_id=file_id)
@@ -136,6 +144,7 @@ def _upload_files_to_vector_store(vs_id: str, files: List[str]) -> List[Dict[str
 
 
 def _create_vector_store_for(display_name: str, key: str) -> str:
+    """Provision a dedicated OpenAI vector store for consultant collateral."""
     vs = client.vector_stores.create(name=f"{display_name} ({key}) resources")
     vs_id = _extract_id(vs)
     if not vs_id:
@@ -144,6 +153,7 @@ def _create_vector_store_for(display_name: str, key: str) -> str:
 
 
 def _initialize_vector_stores(registry: Dict[str, Dict[str, Any]]) -> None:
+    """Ensure each consultant has an up-to-date vector store with their local files."""
     cache = _load_vector_cache()
     updated = False
 
@@ -183,6 +193,7 @@ def _initialize_vector_stores(registry: Dict[str, Dict[str, Any]]) -> None:
 
 
 def _discover_consultants() -> Dict[str, Dict[str, Any]]:
+    """Scan consultant folders and build the registry consumed by the UI + backend."""
     registry: Dict[str, Dict[str, Any]] = {}
     if not CONSULTANTS_ROOT.exists():
         return registry
@@ -239,6 +250,7 @@ def _discover_consultants() -> Dict[str, Dict[str, Any]]:
 
 
 def _response_to_dict(resp: Any) -> Dict[str, Any]:
+    """Best-effort serializer so the UI can inspect OpenAI Responses output."""
     if hasattr(resp, "model_dump"):
         try:
             return resp.model_dump()
@@ -269,6 +281,7 @@ if not CONSULTANTS:
         }
     }
 
+# Build consultant vector stores up front so the first incoming request is fast.
 _initialize_vector_stores(CONSULTANTS)
 
 
@@ -310,6 +323,7 @@ def run_consultant_response(
     container_id: Optional[str] = None,
     consultant_key: str = DEFAULT_CONSULTANT_KEY,
 ):
+    """Call the Responses API using a consultant's instructions + resource files."""
     if consultant_key not in CONSULTANTS:
         raise ValueError(f"Unknown consultant key: {consultant_key}")
 

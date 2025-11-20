@@ -1,4 +1,4 @@
-// modules/fileManager.js
+// modules/fileManager.js keeps the Files sidebar in sync with OpenAI Files/vector stores/containers.
 import { fetchWithDiagnostics } from "./utils.js";
 import { showToast, dismissToast, renderFileList } from "./ui.js";
 
@@ -10,6 +10,7 @@ export class FileManager {
     this.apiKey = apiKey;
   }
 
+  // Upload a user-provided File/Blob to the backend `/v1/files` proxy.
   async uploadFile(file, purpose = "assistants") {
     const formData = new FormData();
     formData.append("file", file);
@@ -26,6 +27,7 @@ export class FileManager {
     return await res.json();
   }
 
+  // Convenience wrappers for diagnostics panels/testing; not heavily used in UI.
   async listFiles() {
     return await fetchWithDiagnostics(apiUrl("/v1/files"), {
       method: "GET",
@@ -45,6 +47,7 @@ export class FileManager {
     });
   }
 
+  // Link uploaded files into the current session vector store so file_search can see them.
   async linkFileToVectorStore(fileId, vectorStoreId) {
     if (!fileId || !vectorStoreId) return null;
     const res = await fetch(apiUrl(`/v1/vector_stores/${vectorStoreId}/files`), {
@@ -57,6 +60,7 @@ export class FileManager {
     return await res.json().catch(() => ({}));
   }
 
+  // Merge backend-generated files (DOCX/XLSX/etc.) into the Files sidebar.
   addGeneratedFiles(records = []) {
     if (!Array.isArray(records) || !records.length) return;
     const current = getCurrentSessionFiles();
@@ -80,6 +84,7 @@ export class FileManager {
     saveCurrentSessionFiles(updated);
   }
 
+  // Called when the browser renders a PDF locally; uploads it back to OpenAI and records metadata.
   async ingestGeneratedFile(blob, filename = "assistant_output.pdf", previewUrl = null, source = "generated") {
     if (!blob) return null;
     const sessionId = window.current_session_id;
@@ -136,6 +141,7 @@ const fileUploadBtn = document.getElementById("openai-file-upload-btn");
 const fileUploadInput = document.getElementById("openai-file-upload-input");
 const uploadedFileList = document.getElementById("uploaded-file-list");
 
+// Keep the accordion open whenever at least one file is attached.
 function expandFilesSection() {
   try {
     const collapseEl = document.getElementById("Filecollapse");
@@ -147,6 +153,7 @@ function expandFilesSection() {
   } catch {}
 }
 
+// Read the file metadata for the currently selected session (DOM first, in-memory second).
 function getCurrentSessionFiles() {
   const sessionEl = document.querySelector(`.chat-session-item[sessionID="${window.current_session_id}"]`);
   if (sessionEl) {
@@ -160,6 +167,7 @@ function getCurrentSessionFiles() {
   return Array.isArray(session?.files) ? [...session.files] : [];
 }
 
+// Persist the provided file list to both DOM attributes and sessionManager.
 function saveCurrentSessionFiles(files = []) {
   const normalized = Array.isArray(files) ? files : [];
   const sessionEl = document.querySelector(`.chat-session-item[sessionID="${window.current_session_id}"]`);
@@ -175,6 +183,7 @@ function saveCurrentSessionFiles(files = []) {
   expandFilesSection();
 }
 
+// Normalize the various shapes (OpenAI SDK objects, UI objects) into a single record format.
 function normalizeFileRecord(record = {}, defaults = {}) {
   const data = { ...defaults, ...record };
   const id = data.openai_file_id || data.id;

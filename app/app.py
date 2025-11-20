@@ -1,3 +1,5 @@
+"""Flask application that orchestrates consultants, resources, and chat UI helpers."""
+
 import io
 import os
 import uuid
@@ -38,10 +40,20 @@ PARALLEL_SUMMARY_SYSTEM = """You orchestrate multiple consultant agents. Summari
 - Mention which consultant provided critical insights.
 Respond concisely but cover the major points."""
 CONSULTANT_TOOL_PREFIX = "call_"
+DIRECT_TOOL_NAMES = [
+    "file_search",
+    "generate_pdf",
+    "generate_docx",
+    "generate_xlsx",
+    "web_search_preview",
+    "code_interpreter",
+]
+_TOOL_LOGGED = False
 
 
 
 def _serialize(obj):
+    """Convert pydantic/BaseModel-like objects into plain dicts for logging."""
     if hasattr(obj, "model_dump"):
         return obj.model_dump()
     if hasattr(obj, "to_dict"):
@@ -50,6 +62,7 @@ def _serialize(obj):
 
 
 def _ensure_dict(value: Any) -> Dict[str, Any]:
+    """Normalize SDK objects into dicts so later code can safely call .get()."""
     if isinstance(value, dict):
         return value
     serialized = _serialize(value)
@@ -60,6 +73,7 @@ def _link_files_to_vector_store(
     file_ids: Optional[List[str]],
     vector_store_id: Optional[str],
 ) -> List[Dict[str, Any]]:
+    """Attach OpenAI file IDs to an existing session vector store."""
     attached: List[Dict[str, Any]] = []
     if not vector_store_id or not file_ids:
         return attached
@@ -92,6 +106,7 @@ def _link_files_to_vector_store(
 
 
 def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, Any]:
+    """Build the metadata object that the UI expects for downloadable files."""
     try:
         meta = client.files.retrieve(file_id)
         data = _ensure_dict(meta)
@@ -109,6 +124,7 @@ def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, A
 
 
 def _sanitize_filename(name: Optional[str], suffix: str) -> str:
+    """Ensure we return filesystem-safe filenames with the proper suffix."""
     base = (name or "").strip() or f"assistant_output{suffix}"
     if not base.lower().endswith(suffix):
         base = f"{base}{suffix}"
@@ -119,6 +135,7 @@ def _sanitize_filename(name: Optional[str], suffix: str) -> str:
 
 
 def _make_temp_path(suffix: str) -> Path:
+    """Create a temporary file path for DOCX/XLSX generation."""
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     temp_path = Path(temp.name)
     temp.close()
@@ -126,6 +143,7 @@ def _make_temp_path(suffix: str) -> Path:
 
 
 def _upload_generated_file(path: Path, filename: str, mimetype: str = "application/octet-stream") -> Optional[str]:
+    """Upload a server-generated artifact to OpenAI Files and clean up the temp file."""
     try:
         with path.open("rb") as handle:
             uploaded = client.files.create(
@@ -140,7 +158,8 @@ def _upload_generated_file(path: Path, filename: str, mimetype: str = "applicati
             pass
 
 
-def _markdown_to_docx(document: Document, markdown_text: str) -> None: # type: ignore
+def _markdown_to_docx(document: Document, markdown_text: str) -> None:  # type: ignore
+    """Very small Markdown → paragraph/heading renderer for DOCX generation."""
     for raw_line in (markdown_text or "").splitlines():
         line = raw_line.rstrip()
         stripped = line.lstrip()
@@ -162,6 +181,7 @@ def _markdown_to_docx(document: Document, markdown_text: str) -> None: # type: i
 
 
 def _handle_generate_docx_tool(args: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Fulfill the `generate_docx` tool call and return uploaded file metadata."""
     markdown_text = args.get("markdown_text")
     if not markdown_text:
         return []
@@ -181,6 +201,7 @@ def _handle_generate_docx_tool(args: Dict[str, Any], vector_store_id: Optional[s
 
 
 def _handle_generate_xlsx_tool(args: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Fulfill the `generate_xlsx` tool call by building sheets with openpyxl."""
     sheets = args.get("sheets")
     rows = args.get("rows")
     if not sheets and rows:
@@ -216,6 +237,7 @@ def _handle_generate_xlsx_tool(args: Dict[str, Any], vector_store_id: Optional[s
 
 
 def _coerce_tool_args(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Responses API delivers tool args under different keys; normalize them."""
     args = entry.get("arguments") or entry.get("function", {}).get("arguments") or {}
     if isinstance(args, str):
         try:
@@ -228,6 +250,7 @@ def _coerce_tool_args(entry: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Look for server-side function calls (DOCX/XLSX) and synthesize files."""
     generated: List[Dict[str, Any]] = []
     outputs = data.get("output") or []
     for entry in outputs:
@@ -248,10 +271,62 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app)  # enable CORS for all routes
+    global _TOOL_LOGGED
+    # These tool names are exposed to Responses so consultant personas can be invoked via tool calls.
+    consultant_tools = [f"{CONSULTANT_TOOL_PREFIX}{key}" for key in CONSULTANTS]
+    if not _TOOL_LOGGED:
+        print(f"[consultant-tools] Registered tool calls: {consultant_tools}")
+        print(f"[direct-tools] Built-in tools: {DIRECT_TOOL_NAMES}")
+        _TOOL_LOGGED = True
 
     @app.route("/")
     def index():
         return render_template("chatbot.html")
+
+
+    def _should_force_direct(message: str) -> bool:
+        """Some tool requests (generate_pdf/docx/xlsx) only exist on the direct chat path."""
+        lowered = (message or "").lower()
+        triggers = [
+            "generate_pdf",
+            "generate docx",
+            "generate pdf",
+            "generate xlsx",
+            "create pdf",
+            "create docx",
+            "create xlsx",
+            "make pdf",
+            "make docx",
+            "make xlsx",
+            "export pdf",
+            "export docx",
+            "export xlsx",
+        ]
+        if any(trigger in lowered for trigger in triggers):
+            return True
+        # simple pairwise terms
+        return ("pdf" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)) or (
+            "docx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)
+        ) or ("xlsx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered))
+
+
+    def _match_consultant_alias(message: str) -> Optional[str]:
+        """Lightweight keyword matcher used when users call out a consultant by name."""
+        raw = (message or "").lower()
+        compact = re.sub(r"[^a-z0-9]+", "", raw)
+        for key, meta in CONSULTANTS.items():
+            for alias in meta.get("aliases", []):
+                alias_raw = (alias or "").lower()
+                alias_compact = re.sub(r"[^a-z0-9]+", "", alias_raw)
+                if alias_raw and alias_raw in raw:
+                    return key
+                if alias_compact and alias_compact in compact:
+                    return key
+            for keyword in meta.get("keywords", []):
+                keyword = (keyword or "").lower()
+                if keyword and keyword in raw:
+                    return key
+        return None
 
 
     def _log_progress(log: Optional[List[Dict[str, Any]]], stage: str, **extra: Any) -> None:
@@ -269,6 +344,7 @@ def create_app() -> Flask:
 
 
     def _extract_text(resp) -> str:
+        """Mirror `_extract_text` from consultant router so tool + summary paths stay consistent."""
         text = getattr(resp, "output_text", None)
         if isinstance(text, list):
             text = text[0] if text else ""
@@ -340,6 +416,7 @@ def create_app() -> Flask:
         progress_log: Optional[List[Dict[str, Any]]] = None,
     ):
         """Legacy call path that wraps `_invoke_consultant_run` in the tool-call shim."""
+        tool_name = f"{CONSULTANT_TOOL_PREFIX}{consultant_key}"
         run_payload = _invoke_consultant_run(
             message,
             project,
@@ -354,6 +431,7 @@ def create_app() -> Flask:
             display_name=run_payload["display_name"],
             duration_ms=run_payload.get("duration_ms"),
         )
+        print(f"[consultant-tool] Executed {tool_name} ({run_payload['display_name']}) with model {run_payload.get('model')}")
         tool_args = {
             "question": message,
             "project": project,
@@ -361,7 +439,6 @@ def create_app() -> Flask:
             "container_id": container_id,
             "consultant_key": consultant_key,
         }
-        tool_name = f"{CONSULTANT_TOOL_PREFIX}{consultant_key}"
         call_stub = {
             "type": "function_call",
             "name": tool_name,
@@ -443,6 +520,7 @@ def create_app() -> Flask:
         aggregated_files: List[Dict[str, Any]] = []
 
         with ThreadPoolExecutor(max_workers=min(len(consultant_keys), 4)) as executor:
+            # Fan out each consultant call and keep track of which future maps to which key.
             future_map = {
                 executor.submit(
                     _invoke_consultant_run,
@@ -467,6 +545,7 @@ def create_app() -> Flask:
                         display_name=run_payload["display_name"],
                         duration_ms=run_payload.get("duration_ms"),
                     )
+                    print(f"[consultant-tool] Parallel run completed for {run_payload['display_name']} ({run_payload['consultant']})")
                 except Exception as exc:  # pragma: no cover - diagnostic
                     error_text = str(exc)
                     failures.append({"consultant": key, "error": error_text})
@@ -535,19 +614,25 @@ def create_app() -> Flask:
         router_decision = None
         progress_log: List[Dict[str, Any]] = []
         consultant_key = None
+        forced_direct = False
         if requested_consultant:
             if requested_consultant not in CONSULTANTS:
                 return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
             consultant_key = requested_consultant
         else:
-            # Accept a client-provided router hint, otherwise call the router locally.
-            router_decision = RouterDecision.from_dict(router_payload)
-            if not router_decision:
-                router_decision = route_consultants(msg)
+            # Accept a client-provided router hint if the UI already ran one, otherwise run the router locally.
+            forced_direct = _should_force_direct(msg)
+            if forced_direct:
+                router_decision = RouterDecision(mode="direct", reason="forced_direct_tool_request")
+            else:
+                router_decision = RouterDecision.from_dict(router_payload)
+                if not router_decision:
+                    router_decision = route_consultants(msg)
             _log_progress(progress_log, "router", mode=router_decision.mode)
             if router_decision.mode == "single":
                 consultant_key = router_decision.primary or DEFAULT_CONSULTANT_KEY
             elif router_decision.mode == "parallel":
+                # When the router suggests multiple consultants, short-circuit and execute that workflow immediately.
                 keys = router_decision.selected_consultants()
                 try:
                     payload = _run_parallel_consultants(
@@ -562,6 +647,12 @@ def create_app() -> Flask:
                     return jsonify(payload)
                 except Exception as exc:
                     return jsonify({"error": str(exc)}), 500
+
+            elif router_decision.mode == "direct" and not forced_direct:
+                # Direct mode still honors explicit consultant mentions such as "Agent iWant".
+                alias_key = _match_consultant_alias(msg)
+                if alias_key:
+                    consultant_key = alias_key
 
         if consultant_key:
             try:
@@ -579,6 +670,7 @@ def create_app() -> Flask:
                 return jsonify({"error": str(exc)}), 500
 
         try:
+            # No consultant selected, so fall back to the general chat model with whatever tools were requested.
             tools: List[Dict[str, Any]] = []
             if isinstance(incoming_tools, list):
                 for tool in incoming_tools:

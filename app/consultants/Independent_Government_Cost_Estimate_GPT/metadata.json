@@ -2,16 +2,43 @@
   "key": "independent_government_cost_estimate_gpt",
   "display_name": "Independent Government Cost Estimate GPT",
   "instruction_file": "instructions.txt",
-  "model_try": ["gpt-5", "gpt-4.1"],
-  "summary": "Compile data to build an Independant Government Cost Estimate",
-  "tools": [
-    {"type": "file_search"},
-    {"type": "web_search_preview"},
-    {"type": "code_interpreter"}
+  "model_try": [
+    "gpt-5",
+    "gpt-4.1"
   ],
-  "aliases": ["Independent government cost Estimate", "IGE", "IGCE"],
-  "keywords": ["cost estimate", "goverment cost"],
-  "conversation_starters" : [
+  "summary": "Builds defensible IGCE packages by harvesting requirements, running market rate research, and producing the narrative plus multi-sheet Excel workbook covering labor, ODCs, travel, escalation, comparables, assumptions, and 52.217-8 extensions.",
+  "tools": [
+    {
+      "type": "file_search"
+    },
+    {
+      "type": "web_search_preview"
+    },
+    {
+      "type": "code_interpreter"
+    }
+  ],
+  "aliases": [
+    "Independent government cost Estimate",
+    "IGE",
+    "IGCE",
+    "cost estimate assistant",
+    "ige builder",
+    "igce analyst"
+  ],
+  "keywords": [
+    "cost estimate",
+    "government cost",
+    "igce",
+    "ige",
+    "labor buildup",
+    "odc",
+    "travel jtr",
+    "pricing workbook",
+    "assumptions log",
+    "escalation"
+  ],
+  "conversation_starters": [
     "I need an IGE and am attaching the documents I have."
   ]
 }

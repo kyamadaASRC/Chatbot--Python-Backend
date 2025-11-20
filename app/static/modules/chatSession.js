@@ -1,4 +1,4 @@
-// modules/chatSession.js
+// modules/chatSession.js manages per-chat metadata (history, files, vector stores, containers).
 import { fetchWithDiagnostics } from "./utils.js";
 
 const LOCAL_API_BASE = window.LOCAL_API_BASE || window.location.origin || "http://127.0.0.1:5001";
@@ -25,7 +25,7 @@ export class ChatSessionManager {
     return session.history || [];
     }
 
-    //Loads session messages and optional metadata (vector store, files)
+    // Loads session messages and optional metadata (vector store, files) so the UI can repopulate
     loadSessionData(sessionId) {
     const session = this.switchSession(sessionId);
     if (!session) return null;
@@ -40,6 +40,7 @@ export class ChatSessionManager {
     };
     }
 
+    // Sessions store file metadata in DOM attributes; hydrate it back into JS objects after reloads.
     hydrateSessionFiles(session, retry = 0) {
         if (!session || !session.id) return session;
 
@@ -77,7 +78,7 @@ export class ChatSessionManager {
     async createSession(name = "New Chat", systemPrompt = this.defaultSystemPrompt) {
         const id = crypto.randomUUID();
 
-        // 🧠 Create a dedicated vector store for this session
+        // 🧠 Create a dedicated vector store for this session so file search stays isolated.
         const vector = await this.createVectorStore(id);
 
         const session = {
@@ -182,7 +183,7 @@ export class ChatSessionManager {
         }
     }
 
-    // Lazily create container if needed
+    // Lazily create container if needed; avoids provisioning until the user runs a tool requiring it.
     async ensureContainer() {
         const session = this.getCurrentSession();
         if (session?.container_id) return session.container_id;
@@ -264,6 +265,7 @@ export class ChatSessionManager {
         this.saveSessionsToLocal();
     }
 
+    // Use the Responses API to generate a short, user-friendly session title shown in the sidebar.
     async updateSessionSummary(prompt, assistantMessage) {
         const session = this.getCurrentSession();
         if (!session) return;
@@ -309,6 +311,7 @@ export class ChatSessionManager {
     }
 
     // Safer version used by main.js to rename session after first assistant reply
+    // Same idea as updateSessionSummary but with extra guards for the first assistant reply.
     async updateSessionSummarySafe(prompt, assistantMessage) {
         const session = this.getCurrentSession();
         if (!session) return;
@@ -425,6 +428,7 @@ export class ChatSessionManager {
     }
 
     // --- Persistence ---
+    // Persist session metadata so browser refreshes restore prior chats.
     saveSessionsToLocal() {
         localStorage.setItem("chatSessions", JSON.stringify(Array.from(this.sessions.entries())));
     }

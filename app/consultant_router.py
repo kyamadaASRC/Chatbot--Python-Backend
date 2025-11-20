@@ -15,7 +15,11 @@ RouterMode = Literal["direct", "single", "parallel"]
 
 ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-4.1-mini")
 ROUTER_SYSTEM_PROMPT = """You route acquisition-related questions to specialized virtual consultants.
-Each consultant entry provides a `key`, `display_name`, `summary`, `keywords`, and `aliases`.
+Input payloads contain:
+- `question`: the latest user request,
+- `history`: prior user/assistant turns in chronological order (oldest first) so you can see context and what has already been delivered,
+- `consultants`: metadata objects with `key`, `display_name`, `summary`, `keywords`, and `aliases`.
+Use both the latest question and the recent history to infer what help the user needs right now (e.g., if they just received an Acquisition Plan, the next request may be for an IGCE).
 Decide whether to:
 - return "single" when one consultant clearly owns the request,
 - return "parallel" when the user needs multiple specialties (up to 3 consultants),
@@ -31,7 +35,7 @@ Always output STRICT JSON with the shape:
 }
 
 When choosing "parallel", include at least two consultant keys and a short prompt that explains
-how to merge the results into one summary. Never hallucinate consultant keys."""
+how to merge the results into one summary. Only return "direct" when none of the consultants clearly cover the request or the history. Never hallucinate consultant keys."""
 
 
 def _build_catalog() -> List[Dict[str, Any]]:
@@ -50,6 +54,7 @@ def _build_catalog() -> List[Dict[str, Any]]:
     return catalog
 
 
+# Cache the catalog when the module loads so each router call only sends a lightweight payload.
 ROUTER_CATALOG = _build_catalog()
 
 
@@ -236,6 +241,7 @@ def route_consultants(
     if not ROUTER_MODEL:
         return _fallback_decision(message)
 
+    # The router sees the latest user question, recent context, and a trimmed catalog.
     payload = {
         "question": message,
         "history": _normalize_history(history),

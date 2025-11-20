@@ -1,4 +1,5 @@
-# openai_client.py
+"""Locate .env credentials and expose a shared OpenAI client for all modules."""
+
 from openai import OpenAI
 import os
 from dotenv import load_dotenv

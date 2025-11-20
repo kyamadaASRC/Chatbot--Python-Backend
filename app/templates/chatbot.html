@@ -127,7 +127,6 @@
                         </button>
                     </form>
                     <div class="flex-grow-1 d-flex flex-column gap-2">
-                        <div id="starter-panel" class="starter-panel d-none"></div>
                         <textarea id="edit-field" class="text-white" rows="1" placeholder="Type your message..." autocomplete="off"></textarea>
                     </div>
                     <img id="send-stop-button" src="{{ url_for('static', filename='img/message-send.svg') }}" width="40px" height="40px">
@@ -148,6 +147,7 @@
         </div>
 
         <script>
+            // Expose asset paths so ES modules can toggle icons without guessing URLs.
             window.STATIC_ASSETS = {
                 messageSend: "{{ url_for('static', filename='img/message-send.svg') }}",
                 messageStop: "{{ url_for('static', filename='img/message-stop.svg') }}"
@@ -159,6 +159,7 @@
         <script>
             try {
                 const el = document.getElementById('chat-model-data');
+                // Keep a global reference so chatClient/chatSession know which model to default to.
                 window.CHAT_MODEL = el ? JSON.parse(el.textContent) : 'gpt-5';
             } catch (e) {
                 window.CHAT_MODEL = 'gpt-5';

@@ -2,14 +2,41 @@
   "key": "industry_feedback_gpt",
   "display_name": "Industry Feedback",
   "instruction_file": "instructions.txt",
-  "model_try": ["gpt-5-pro","gpt-5"],
-  "summary": "Analyzes industry comments and produces structured feedback reports.",
-  "tools": [
-    {"type": "file_search"},
-    {"type": "web_search_preview"},
-    {"type": "image_generation"},
-    {"type": "code_interpreter"}
+  "model_try": [
+    "gpt-5-pro",
+    "gpt-5"
   ],
-  "aliases": ["industry feedback", "industry feedback consultant"],
-  "keywords": ["industry feedback", "rfi comments", "market responses"]
+  "summary": "Consumes industry questions and draft RFx files, clusters and traces every question, drafts public-safe answers, and outputs the QA master, traceability matrix, trends brief, and amendment-ready language.",
+  "tools": [
+    {
+      "type": "file_search"
+    },
+    {
+      "type": "web_search_preview"
+    },
+    {
+      "type": "image_generation"
+    },
+    {
+      "type": "code_interpreter"
+    }
+  ],
+  "aliases": [
+    "industry feedback",
+    "industry feedback consultant",
+    "q&a consolidator",
+    "industry questions gpt",
+    "qa routing assistant"
+  ],
+  "keywords": [
+    "industry feedback",
+    "rfi comments",
+    "market responses",
+    "question clustering",
+    "qa master",
+    "traceability matrix",
+    "trends summary",
+    "amendment seeds",
+    "public answers"
+  ]
 }

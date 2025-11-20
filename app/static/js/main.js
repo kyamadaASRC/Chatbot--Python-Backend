@@ -1,4 +1,5 @@
 
+// main.js wires the UI elements to the chat/session/file managers and coordinates router previews.
 // import utils.js
 import {
   renderUserMessage,
@@ -45,7 +46,6 @@ const editField          = document.getElementById("edit-field");
 const sendStopButton     = document.getElementById("send-stop-button");
 const scrollDownBtn      = document.getElementById("scroll-down-btn");
 const uploadedFilesList  = document.getElementById("uploaded-file-list");
-const starterPanel       = document.getElementById("starter-panel");
 const assetPaths = window.STATIC_ASSETS || {};
 const systemPrompt = `You are a helpful assistant. You can use the tool 'generate_pdf' to create downloadable PDFs.
          When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown).
@@ -65,26 +65,6 @@ let current_session_id = null;
 let current_vector_store_id = null;
 let current_container_id = null;
 let existingSessions = [];
-const consultantStarters = new Map();
-let shownStarterConsultants = new Set();
-
-async function loadConsultantMetadata() {
-  try {
-    const res = await fetch("/v1/consultants");
-    if (!res.ok) return;
-    const data = await res.json().catch(() => ({}));
-    (data.consultants || []).forEach((item) => {
-      if (!item?.key) return;
-      const starters = Array.isArray(item.conversation_starters)
-        ? item.conversation_starters.filter((s) => typeof s === "string" && s.trim())
-        : [];
-      consultantStarters.set(item.key, starters);
-    });
-  } catch (err) {
-    console.warn("Failed to load consultant metadata:", err);
-  }
-}
-
 // Shape the recent chat history into the payload the backend router expects.
 function buildRouterHistoryPayload(history = [], limit = 6) {
   if (!Array.isArray(history)) return [];
@@ -100,7 +80,7 @@ function buildRouterHistoryPayload(history = [], limit = 6) {
 // Swap the text inside a spinner toast while keeping the animation running.
 function updateSpinnerToast(toastEl, message) {
   if (!toastEl) return;
-  toastEl.innerHTML = `<span class="spinner" style="margin-right:8px"><div class="dot"></div><div class="dot"></div><div class="dot"></div></span>${message}`;
+  toastEl.textContent = message;
 }
 
 // Ping /v1/router/preview so we can inform the user what is about to happen.
@@ -155,6 +135,62 @@ function announceRouterCompletion(response, previewMeta) {
   } else if (previewMeta?.decision?.mode === "direct") {
     showToast("General assistant response ready.", "success", 1800);
   }
+}
+
+function renderConsultantNotesSection(response) {
+  if (!response || !response.consultant_notes) return;
+  const notes = response.consultant_notes;
+  const chatContainer = document.getElementById("chat-history");
+  if (!chatContainer) return;
+  const wrapper = document.createElement("div");
+  wrapper.className = "consultant-notes-block";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "consultant-notes-toggle";
+  toggle.innerHTML = `<span>Consultant notes</span><span class="chevron">▼</span>`;
+
+  const panel = document.createElement("div");
+  panel.className = "consultant-notes-panel";
+  panel.style.display = "none";
+
+  const consultantMap = new Map();
+  if (Array.isArray(response.consultants)) {
+    response.consultants.forEach((entry) => {
+      if (!entry || !entry.consultant) return;
+      consultantMap.set(entry.consultant, entry);
+    });
+  }
+
+  Object.entries(notes).forEach(([key, text]) => {
+    const data = consultantMap.get(key) || {};
+    const card = document.createElement("div");
+    card.className = "consultant-note-card";
+
+    const title = document.createElement("div");
+    title.className = "consultant-note-title";
+    title.textContent = data.display_name || key || "Consultant";
+    card.appendChild(title);
+
+    const body = document.createElement("div");
+    body.className = "consultant-note-body";
+    body.textContent = text || "No notes were returned.";
+    card.appendChild(body);
+
+    panel.appendChild(card);
+  });
+
+  let expanded = false;
+  toggle.addEventListener("click", () => {
+    expanded = !expanded;
+    panel.style.display = expanded ? "block" : "none";
+    toggle.classList.toggle("open", expanded);
+  });
+
+  wrapper.appendChild(toggle);
+  wrapper.appendChild(panel);
+  chatContainer.appendChild(wrapper);
+  scrollToBottom();
 }
 
 
@@ -244,6 +280,7 @@ function extractMarkdownFromToolCall(data) {
   return "";
 }
 
+// Some consultants return tool calls (e.g., "generate_pdf"); fulfill them client-side so files show up instantly.
 async function handleToolCallsIfAny(data) {
   // Look for function/tool calls named "generate_pdf"
   const outputs = Array.isArray(data?.output) ? data.output : [];
@@ -283,40 +320,7 @@ async function handleToolCallsIfAny(data) {
   }
 }
 
-
-// Initialize on refresh
-function clearStarterPanel(force = false) {
-  if (!starterPanel) return;
-  if (force || !starterPanel.children.length) {
-    starterPanel.innerHTML = "";
-    starterPanel.classList.add("d-none");
-    starterPanel.removeAttribute("data-active-consultant");
-  }
-}
-
-function showStarterChoices(consultantKey) {
-  if (!starterPanel || !consultantKey) return;
-  if (shownStarterConsultants.has(consultantKey)) return;
-  const starters = consultantStarters.get(consultantKey) || [];
-  if (!starters.length) return;
-  starterPanel.innerHTML = "";
-  starters.forEach((text) => {
-    if (!text || typeof text !== "string") return;
-    const chip = document.createElement("div");
-    chip.className = "starter-chip";
-    chip.textContent = text;
-    chip.addEventListener("click", () => {
-      editField.value = text;
-      editField.focus();
-      clearStarterPanel(true);
-    });
-    starterPanel.appendChild(chip);
-  });
-  starterPanel.classList.remove("d-none");
-  starterPanel.dataset.activeConsultant = consultantKey;
-  shownStarterConsultants.add(consultantKey);
-}
-
+// Creates a new session record, renders it in the sidebar, and syncs window.* globals.
 async function createAndMountSession(name = "New Chat") {
     const progressToast = showToast("🧠 Initializing... ", "info", 0);
 
@@ -350,8 +354,6 @@ async function createAndMountSession(name = "New Chat") {
   window.current_vector_store_id = current_vector_store_id;
   current_container_id = session.container_id || null;
   window.current_container_id = current_container_id;
-  shownStarterConsultants = new Set();
-  clearStarterPanel(true);
 
   // 4) clear chat view & show system line
   chatHistory.innerHTML = "";
@@ -529,8 +531,6 @@ chatSessionList.addEventListener("click", async (e) => {
     window.current_vector_store_id = current_vector_store_id;
     current_container_id = sessionDiv.getAttribute("container_id") || data?.container_id || null;
     window.current_container_id = current_container_id;
-    clearStarterPanel(true);
-
     // Render history + files
     chatHistory.innerHTML = "";
     if (data) {
@@ -688,12 +688,8 @@ scrollDownBtn?.addEventListener("click", () => {
     sessionManager.addMessageToCurrent("user", text);
     sessionManager.addMessageToCurrent("assistant", finalText);
     renderAssistantMessage(finalText);
+    renderConsultantNotesSection(response);
     await handleToolCallsIfAny(response);
-    if (response?.mode === "consultant" && response.consultant) {
-      showStarterChoices(response.consultant);
-    } else {
-      clearStarterPanel();
-    }
     await sessionManager.updateSessionSummarySafe(text, finalText);
     isGenerating = false;
     setInputDisabled(false);
@@ -733,6 +729,7 @@ sendStopButton?.addEventListener("click", async () => {
 });
 
 // ===== Initialize (no persistence) =====
+// Entry point when DOM loads: ensure sidebar state, spawn a starter session, prime scroll controls.
 async function initialize() {
   // ensure sidebar visible on load (CSS handles state)
   sidebar?.classList.remove("collapsed");
@@ -740,8 +737,6 @@ async function initialize() {
   // Ensure scroll-down button is managed by class, not inline style
   try { if (scrollDownBtn) scrollDownBtn.style.removeProperty('display'); } catch {}
   
-  await loadConsultantMetadata();
-
   // Create one fresh session
   const div = await createAndMountSession("New Chat");
   activateSessionDiv(div);
