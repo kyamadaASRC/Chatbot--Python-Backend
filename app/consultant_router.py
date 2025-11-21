@@ -20,6 +20,7 @@ ROUTER_SYSTEM_PROMPT = """You route acquisition-related questions to specialized
 Input payloads contain:
 - `question`: the latest user request,
 - `history`: prior user/assistant turns in chronological order (oldest first) so you can see context and what has already been delivered,
+- `files`: optional list of filenames/extensions recently uploaded by the user,
 - `consultants`: metadata objects with `key`, `display_name`, `summary`, `keywords`, and `aliases`.
 You may also suggest which tools the downstream assistant should expose (e.g., code_interpreter, generate_docx, generate_pdf, generate_xlsx).
 Use both the latest question and the recent history to infer what help the user needs right now (e.g., if they just received an Acquisition Plan, the next request may be for an IGCE).
@@ -80,6 +81,23 @@ def _normalize_history(history: Optional[List[Dict[str, Any]]]) -> List[Dict[str
             continue
         trimmed.append({"role": role, "content": text[:500]})
     return trimmed
+
+
+def _normalize_files(files: Optional[List[Dict[str, Any]]]) -> List[str]:
+    """Surface a short list of filenames/extensions so the router can infer intent from uploads."""
+    names: List[str] = []
+    if not isinstance(files, list):
+        return names
+    for entry in files[:8]:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name") or entry.get("filename") or entry.get("display_name")
+        if not name or not isinstance(name, str):
+            continue
+        name = name.strip()
+        if name:
+            names.append(name[:120])
+    return names
 
 
 def _extract_text(resp: Any) -> str:
@@ -242,6 +260,7 @@ def _parse_router_payload(data: str) -> Optional[Dict[str, Any]]:
 def route_consultants(
     message: str,
     history: Optional[List[Dict[str, Any]]] = None,
+    files: Optional[List[Dict[str, Any]]] = None,
     max_parallel: int = 3,
 ) -> RouterDecision:
     """Primary entry point used by backend + UI preview."""
@@ -255,6 +274,7 @@ def route_consultants(
     payload = {
         "question": message,
         "history": _normalize_history(history),
+        "files": _normalize_files(files),
         "consultants": ROUTER_CATALOG,
     }
     start = time.time()

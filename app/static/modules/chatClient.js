@@ -175,6 +175,7 @@ export class ChatClient {
         container_id: containerId || null,
         tools,
         history: historyMsgs,
+        files: Array.isArray(session.files) ? session.files : [],
         // Pass along the previewed router recommendation so the backend avoids double work.
         router_decision: routerDecision || null,
       }),

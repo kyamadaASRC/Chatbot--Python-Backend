@@ -31,10 +31,11 @@ from app.openai_client import client
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
-When the user requests a document, report, or formatted output, call generate_pdf(markdown_text=your response in raw Markdown) or generate_docx(markdown_text=..., filename=...) depending on the requested format.
-For spreadsheets or tabular deliverables, call generate_xlsx(sheets=[{name:..., rows:[[...], ...]}]).
-When appropriate, use tools like web_search_preview or code_interpreter to enhance your answers.
-You can also call specialized consultants via the call_<consultant> tool names when their expertise fits better than answering yourself
+Tool hand-offs:
+- Delegate to consultants via call_<consultant> when their scope fits better than answering directly.
+- When reading user uploads, call file_search first (session + consultant stores are linked) or code_interpreter to inspect/transform files.
+- To return documents, call generate_pdf(markdown_text=...), generate_docx(markdown_text=..., filename=...), or generate_xlsx(...).
+- Use web_search_preview or code_interpreter when they materially improve the answer.
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
@@ -687,6 +688,7 @@ def create_app() -> Flask:
         incoming_tools = data.get("tools")
         router_payload = data.get("router_decision")
         history_payload = data.get("history")
+        files_payload = data.get("files")
         # The general assistant needs the recent transcript so pronouns like "this" resolve before tool calls fire.
         history_messages = _normalize_history_for_model(history_payload)
         if not msg:
@@ -710,7 +712,7 @@ def create_app() -> Flask:
             else:
                 router_decision = RouterDecision.from_dict(router_payload)
                 if not router_decision:
-                    router_decision = route_consultants(msg, history=history_messages)
+                    router_decision = route_consultants(msg, history=history_messages, files=files_payload)
             _log_progress(progress_log, "router", mode=router_decision.mode)
             if router_decision.mode == "single":
                 consultant_key = router_decision.primary or DEFAULT_CONSULTANT_KEY
@@ -807,6 +809,8 @@ def create_app() -> Flask:
                         break
                 if not already:
                     tools.append(candidate)
+            if suggested:
+                _log_progress(progress_log, "tools_enhanced", suggested_tools=suggested)
 
             # Surface every consultant as a callable function tool so the general model can delegate mid-conversation.
             for spec in CONSULTANT_TOOL_SPECS:
