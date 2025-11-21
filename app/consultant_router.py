@@ -21,6 +21,7 @@ Input payloads contain:
 - `question`: the latest user request,
 - `history`: prior user/assistant turns in chronological order (oldest first) so you can see context and what has already been delivered,
 - `consultants`: metadata objects with `key`, `display_name`, `summary`, `keywords`, and `aliases`.
+You may also suggest which tools the downstream assistant should expose (e.g., code_interpreter, generate_docx, generate_pdf, generate_xlsx).
 Use both the latest question and the recent history to infer what help the user needs right now (e.g., if they just received an Acquisition Plan, the next request may be for an IGCE).
 Decide whether to:
 - return "single" when one consultant clearly owns the request,
@@ -33,7 +34,8 @@ Always output STRICT JSON with the shape:
   "primary": "<consultant key or null>",
   "secondaries": ["<key>", ...],
   "reason": "short explanation",
-  "summary_prompt": "How to synthesize multi-consultant answers (optional)"
+  "summary_prompt": "How to synthesize multi-consultant answers (optional)",
+  "suggested_tools": ["tool_name", ...] // optional; e.g., ["code_interpreter", "generate_docx"]
 }
 
 When choosing "parallel", include at least two consultant keys and a short prompt that explains
@@ -139,6 +141,7 @@ class RouterDecision:
     secondaries: List[str] = field(default_factory=list)
     reason: str = ""
     summary_prompt: Optional[str] = None
+    suggested_tools: List[str] = field(default_factory=list)
     raw_text: str = ""
     model: Optional[str] = None
     latency_ms: Optional[int] = None
@@ -170,6 +173,7 @@ class RouterDecision:
             "secondaries": self.secondaries,
             "reason": self.reason,
             "summary_prompt": self.summary_prompt,
+            "suggested_tools": self.suggested_tools,
             "model": self.model,
             "latency_ms": self.latency_ms,
         }
@@ -190,12 +194,16 @@ class RouterDecision:
             secondaries = []
         reason = data.get("reason") or ""
         summary_prompt = data.get("summary_prompt")
+        suggested_tools = data.get("suggested_tools") or []
+        if not isinstance(suggested_tools, list):
+            suggested_tools = []
         return cls(
             mode=mode,  # type: ignore[arg-type]
             primary=primary,
             secondaries=secondaries,
             reason=reason,
             summary_prompt=summary_prompt,
+            suggested_tools=suggested_tools,
             raw_text=data.get("raw_text", ""),
             model=data.get("model"),
             latency_ms=data.get("latency_ms"),
@@ -267,6 +275,7 @@ def route_consultants(
             secondaries=parsed.get("secondaries", []),
             reason=parsed.get("reason") or "",
             summary_prompt=parsed.get("summary_prompt"),
+            suggested_tools=parsed.get("suggested_tools", []),
             raw_text=text,
             model=ROUTER_MODEL,
             latency_ms=latency_ms,

@@ -18,6 +18,78 @@ OVERVIEW_PATH = CONSULTANTS_ROOT / "overview.md"
 # Fallback persona text used when a consultant folder is missing explicit instructions.
 DEFAULT_INSTRUCTION_TEXT = "You are the Agent_iWant_GPT assistant."
 
+# Reusable document-generation tools that consultants can call.
+DOC_TOOL_SPECS = [
+    {
+        "type": "function",
+        "name": "generate_pdf",
+        "description": "Convert markdown text into a downloadable PDF.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "markdown_text": {
+                    "type": "string",
+                    "description": "The Markdown content to be converted into a PDF document.",
+                },
+            },
+            "required": ["markdown_text"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "generate_docx",
+        "description": "Convert markdown text into a .docx document.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "markdown_text": {
+                    "type": "string",
+                    "description": "The Markdown content that should be converted into DOCX paragraphs/headings.",
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Optional name for the generated .docx file.",
+                },
+            },
+            "required": ["markdown_text"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "generate_xlsx",
+        "description": "Create an .xlsx workbook from structured row data.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "Optional name for the generated .xlsx file.",
+                },
+                "sheets": {
+                    "type": "array",
+                    "description": "List of worksheets to include. Each sheet must define a name and rows.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Worksheet name (31 chars max)."},
+                            "rows": {
+                                "type": "array",
+                                "description": "Rows of data; each row is an array of cell values.",
+                                "items": {
+                                    "type": "array",
+                                    "items": {},
+                                },
+                            },
+                        },
+                        "required": ["rows"],
+                    },
+                },
+            },
+            "required": ["sheets"],
+        },
+    },
+]
+
 
 def _slugify(name: str) -> str:
     """Generate deterministic consultant keys from folder names."""
@@ -368,6 +440,16 @@ def run_consultant_response(
             else:
                 t["container"] = {"type": "auto"}
         request_tools.append(t)
+
+    # Ensure document-generation helpers are available to every consultant.
+    existing_names = {t.get("name") for t in request_tools if isinstance(t, dict)}
+    for spec in DOC_TOOL_SPECS:
+        if spec["name"] not in existing_names:
+            request_tools.append(dict(spec))
+    # Ensure code interpreter is present even if metadata omitted it.
+    has_ci = any(isinstance(t, dict) and t.get("type") == "code_interpreter" for t in request_tools)
+    if not has_ci:
+        request_tools.append({"type": "code_interpreter", "container": container_id or {"type": "auto"}})
 
     last_err: Optional[Exception] = None
     # Try each preferred model in order until one succeeds.

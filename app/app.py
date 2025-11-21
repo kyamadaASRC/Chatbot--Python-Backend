@@ -23,6 +23,7 @@ from app.consultants import (
     list_consultants,
     get_consultant_overview,
     _extract_id,
+    DOC_TOOL_SPECS as CONSULTANT_DOC_TOOL_SPECS,
 )
 from app.consultant_router import route_consultants, RouterDecision, describe_decision
 from app.openai_client import client
@@ -51,6 +52,7 @@ DIRECT_TOOL_NAMES = [
     "web_search_preview",
     "code_interpreter",
 ]
+DOC_TOOL_SPECS = CONSULTANT_DOC_TOOL_SPECS
 _TOOL_LOGGED = False
 
 
@@ -784,6 +786,28 @@ def create_app() -> Flask:
                 if not has_file_search:
                     tools.insert(0, {"type": "file_search", "vector_store_ids": [vector_store_id]})
 
+            # If the router suggested specific tools, make sure they are present even if the client omitted them.
+            suggested = (router_decision.suggested_tools if router_decision else []) or []
+            for suggestion in suggested:
+                candidate: Optional[Dict[str, Any]] = None
+                if suggestion == "code_interpreter":
+                    candidate = {"type": "code_interpreter", "container": container_id or {"type": "auto"}}
+                elif suggestion == "file_search" and vector_store_id:
+                    candidate = {"type": "file_search", "vector_store_ids": [vector_store_id]}
+                else:
+                    match = next((spec for spec in DOC_TOOL_SPECS if spec.get("name") == suggestion), None)
+                    if match:
+                        candidate = copy.deepcopy(match)
+                if not candidate:
+                    continue
+                already = False
+                for tool in tools:
+                    if tool.get("name") == candidate.get("name") or tool.get("type") == candidate.get("type"):
+                        already = True
+                        break
+                if not already:
+                    tools.append(candidate)
+
             # Surface every consultant as a callable function tool so the general model can delegate mid-conversation.
             for spec in CONSULTANT_TOOL_SPECS:
                 tools.append(copy.deepcopy(spec))
@@ -791,6 +815,8 @@ def create_app() -> Flask:
             convo_input: List[Dict[str, str]] = [
                 {"role": "system", "content": GENERAL_CHAT_SYSTEM},
             ]
+            if suggested:
+                convo_input.append({"role": "system", "content": f"Tool preference: consider using {', '.join(suggested)} if helpful."})
             convo_input.extend(history_messages)
             convo_input.append({"role": "user", "content": msg})
             resp = client.responses.create(
