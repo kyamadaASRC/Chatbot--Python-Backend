@@ -29,6 +29,7 @@ class DummyResponse:
 @pytest.fixture
 def flask_client():
     app = app_module.create_app()
+    assert app is not None, "create_app returned None"
     app.config.update(TESTING=True)
     with app.test_client() as client:
         yield client

@@ -400,13 +400,21 @@ def create_app() -> Flask:
             "export pdf",
             "export docx",
             "export xlsx",
+            "download pdf",
+            "download docx",
+            "download xlsx",
+            "save as pdf",
+            "save as docx",
+            "save as xlsx",
         ]
         if any(trigger in lowered for trigger in triggers):
             return True
         # simple pairwise terms
-        return ("pdf" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)) or (
-            "docx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered)
-        ) or ("xlsx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered))
+        return (
+            ("pdf" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered or "download" in lowered or "save" in lowered))
+            or ("docx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered or "download" in lowered or "save" in lowered))
+            or ("xlsx" in lowered and ("generate" in lowered or "create" in lowered or "export" in lowered or "download" in lowered or "save" in lowered))
+        )
 
 
     def _log_progress(log: Optional[List[Dict[str, Any]]], stage: str, **extra: Any) -> None:
