@@ -90,6 +90,37 @@ DOC_TOOL_SPECS = [
     },
 ]
 
+# Tool for selecting/editing DOCX templates via vector search + code interpreter.
+DOC_TOOL_SPECS.append(
+    {
+        "type": "function",
+        "name": "select_and_edit_docx",
+        "description": "Pick the best-matching DOCX template from the library and optionally apply edits using code interpreter.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "User request that describes the needed template.",
+                },
+                "edit_instructions": {
+                    "type": "string",
+                    "description": "Optional instructions to apply to the selected template.",
+                },
+                "file_id": {
+                    "type": "string",
+                    "description": "Optional file_id to edit directly (skips template selection).",
+                },
+                "vector_store_id": {
+                    "type": "string",
+                    "description": "Optional vector store to attach generated files to.",
+                },
+            },
+            "required": ["prompt"],
+        },
+    }
+)
+
 
 def _slugify(name: str) -> str:
     """Generate deterministic consultant keys from folder names."""

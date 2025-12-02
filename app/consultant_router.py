@@ -14,7 +14,7 @@ from app.openai_client import client
 RouterMode = Literal["direct", "single", "parallel"]
 
 # Use the dedicated router model when provided; fall back to the chat model so previews still work in dev.
-ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-5")
+ROUTER_MODEL = os.getenv("ROUTER_MODEL") or os.getenv("CHAT_MODEL", "gpt-5-mini")
 # System prompt that forces JSON output so the router decision can be parsed deterministically.
 ROUTER_SYSTEM_PROMPT = """You route acquisition-related questions to specialized virtual consultants.
 Input payloads contain:

@@ -144,6 +144,34 @@ export class ChatClient {
       },
     });
 
+    tools.push({
+      type: "function",
+      name: "select_and_edit_docx",
+      description: "Pick the best DOCX template from the library and optionally apply edits to it.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Description of the document/template that is needed.",
+          },
+          edit_instructions: {
+            type: "string",
+            description: "Optional instructions to apply to the chosen template.",
+          },
+          file_id: {
+            type: "string",
+            description: "Optional existing OpenAI file_id to edit directly (skips selection).",
+          },
+          vector_store_id: {
+            type: "string",
+            description: "Optional vector store id to attach generated files to.",
+          },
+        },
+        required: ["prompt"],
+      },
+    });
+
     tools.push({ type: "web_search_preview" });
     const codeInterpreterTool = { type: "code_interpreter" };
     if (containerId) {
@@ -218,6 +246,11 @@ export class ChatClient {
 
     const assistantMsg = extractAssistantTextFromResponse(data) || data.text || "";
     data._assistant_message = assistantMsg;
+
+    // Expose the full chat model payload for debugging (parity with router/summary logs).
+    if (data?.response_payload) {
+      console.log("Chat model response payload:", data.response_payload);
+    }
 
     // Tool-call handling is centralized in main.js to avoid duplicates.
     return data;

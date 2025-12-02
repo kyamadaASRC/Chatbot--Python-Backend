@@ -27,9 +27,11 @@ from app.consultants import (
 )
 from app.consultant_router import route_consultants, RouterDecision, describe_decision
 from app.openai_client import client
+from app.Select_Edit_Docx import select_and_edit_docx
 
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL") or "gpt-5-mini"
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
 Tool hand-offs:
 - Delegate to consultants via call_<consultant> when their scope fits better than answering directly.
@@ -52,6 +54,7 @@ DIRECT_TOOL_NAMES = [
     "generate_xlsx",
     "web_search_preview",
     "code_interpreter",
+    "select_and_edit_docx",
 ]
 DOC_TOOL_SPECS = CONSULTANT_DOC_TOOL_SPECS
 _TOOL_LOGGED = False
@@ -261,9 +264,11 @@ def _coerce_tool_args(entry: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str]) -> List[Dict[str, Any]]:
-    """Look for server-side function calls (DOCX/XLSX) and synthesize files."""
+def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str]) -> Dict[str, Any]:
+    """Look for server-side function calls (DOCX/XLSX/selection) and synthesize files."""
     generated: List[Dict[str, Any]] = []
+    messages: List[str] = []
+    active_vector_store = vector_store_id
     outputs = data.get("output") or []
     for entry in outputs:
         entry_type = entry.get("type")
@@ -274,10 +279,40 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
             continue
         args = _coerce_tool_args(entry)
         if name == "generate_docx":
-            generated.extend(_handle_generate_docx_tool(args, vector_store_id))
+            generated.extend(_handle_generate_docx_tool(args, active_vector_store))
         elif name == "generate_xlsx":
-            generated.extend(_handle_generate_xlsx_tool(args, vector_store_id))
-    return generated
+            generated.extend(_handle_generate_xlsx_tool(args, active_vector_store))
+        elif name == "select_and_edit_docx":
+            prompt = (args.get("prompt") or "").strip()
+            if not prompt:
+                messages.append("select_and_edit_docx: missing prompt; skipping.")
+                continue
+            edit_instructions = (args.get("edit_instructions") or args.get("instructions") or "").strip()
+            file_id = (args.get("file_id") or "").strip() or None
+            target_vs = args.get("vector_store_id") or active_vector_store
+            result = select_and_edit_docx(
+                prompt=prompt,
+                edit_instructions=edit_instructions or None,
+                file_id=file_id,
+                vector_store_id=target_vs,
+            )
+            if result.get("message"):
+                messages.append(result["message"])
+            result_vs = result.get("vector_store_id") or target_vs
+            if result_vs and not active_vector_store:
+                active_vector_store = result_vs
+            output_file_ids = result.get("file_ids") or []
+            if output_file_ids:
+                effective_vs = result_vs or target_vs
+                if effective_vs:
+                    generated.extend(_link_files_to_vector_store(output_file_ids, effective_vs))
+                else:
+                    generated.extend([_fetch_file_metadata(fid) for fid in output_file_ids if fid])
+    return {
+        "generated_files": generated,
+        "messages": messages,
+        "vector_store_id": active_vector_store,
+    }
 
 
 def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], limit: int = 8) -> List[Dict[str, str]]:
@@ -476,8 +511,12 @@ def create_app() -> Flask:
         text = (result.get("text") or "").strip() or "The consultant returned no notes."
         file_ids = result.get("file_ids") or []
         response_payload = result.get("response_payload") or {}
-        generated_files = _process_server_tool_calls(response_payload, vector_store_id)
+        tool_results = _process_server_tool_calls(response_payload, vector_store_id)
+        generated_files = tool_results.get("generated_files", [])
         generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
+        tool_messages = tool_results.get("messages") or []
+        if tool_messages:
+            text = f"{text}\n\n" + "\n\n".join(tool_messages)
         meta = CONSULTANTS.get(consultant_key, {})
         return {
             "question": message,
@@ -569,7 +608,7 @@ def create_app() -> Flask:
         compiled = "\n".join(lines)
         started = time.time()
         resp = client.responses.create(
-            model=CHAT_MODEL,
+            model=SUMMARY_MODEL,
             input=[
                 {"role": "system", "content": summary_system},
                 {"role": "user", "content": compiled},
@@ -579,8 +618,12 @@ def create_app() -> Flask:
         serialized = _ensure_dict(resp)
         text = _extract_text(resp) or "Summary was not generated."
         file_ids = getattr(resp, "output_file_ids", None) or []
-        generated_files = _process_server_tool_calls(serialized, vector_store_id)
+        tool_results = _process_server_tool_calls(serialized, vector_store_id)
+        generated_files = tool_results.get("generated_files", [])
         generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
+        tool_messages = tool_results.get("messages") or []
+        if tool_messages:
+            text = f"{text}\n\n" + "\n\n".join(tool_messages)
         return {
             "text": text,
             "file_ids": file_ids,
@@ -707,6 +750,7 @@ def create_app() -> Flask:
         progress_log: List[Dict[str, Any]] = []
         consultant_key = None
         forced_direct = False
+        fallback_mode: Optional[str] = None
         if requested_consultant:
             if requested_consultant not in CONSULTANTS:
                 return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
@@ -722,26 +766,13 @@ def create_app() -> Flask:
                 if not router_decision:
                     router_decision = route_consultants(msg, history=history_messages, files=files_payload)
             _log_progress(progress_log, "router", mode=router_decision.mode)
-            if router_decision.mode == "single":
-                consultant_key = router_decision.primary or DEFAULT_CONSULTANT_KEY
-            elif router_decision.mode == "parallel":
-                # When the router suggests multiple consultants, short-circuit and execute that workflow immediately.
-                keys = router_decision.selected_consultants()
-                try:
-                    payload = _run_parallel_consultants(
-                        msg,
-                        project,
-                        vector_store_id,
-                        container_id,
-                        keys,
-                        router_decision,
-                        progress_log,
-                    )
-                    return jsonify(payload)
-                except Exception as exc:
-                    return jsonify({"error": str(exc)}), 500
+            if router_decision.mode in ("single", "parallel"):
+                fallback_mode = router_decision.mode
+                # Hint which consultants were planned so the assistant can delegate appropriately.
+                planned = router_decision.selected_consultants()
+                if planned:
+                    _log_progress(progress_log, "router_plan", consultants=planned)
 
-        # When a specific consultant is selected (router or explicit), run that persona immediately.
         if consultant_key:
             try:
                 if router_decision and router_decision.mode == "single":
@@ -878,11 +909,50 @@ def create_app() -> Flask:
                     return jsonify(payload)
                 except Exception as exc:
                     return jsonify({"error": str(exc)}), 500
+            # If the model did not delegate, honor the router's plan as a fallback and log it.
+            if fallback_mode == "parallel" and router_decision:
+                keys = router_decision.selected_consultants()
+                _log_progress(progress_log, "fallback_parallel_shortcircuit", consultants=keys)
+                try:
+                    payload = _run_parallel_consultants(
+                        msg,
+                        project,
+                        vector_store_id,
+                        container_id,
+                        keys,
+                        router_decision,
+                        progress_log,
+                    )
+                    payload["fallback_shortcircuit"] = "parallel"
+                    return jsonify(payload)
+                except Exception as exc:
+                    return jsonify({"error": str(exc)}), 500
+            if fallback_mode == "single" and router_decision:
+                target = router_decision.primary or DEFAULT_CONSULTANT_KEY
+                _log_progress(progress_log, "fallback_consultant_shortcircuit", consultant=target)
+                try:
+                    payload = _consultant_tool_call(
+                        msg,
+                        project,
+                        vector_store_id,
+                        container_id,
+                        target,
+                        router_decision=router_decision,
+                        progress_log=progress_log,
+                    )
+                    payload["fallback_shortcircuit"] = "consultant"
+                    return jsonify(payload)
+                except Exception as exc:
+                    return jsonify({"error": str(exc)}), 500
             text = _extract_text(resp) or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
             generated_files = []
-            generated_files.extend(_process_server_tool_calls(serialized, vector_store_id))
+            tool_results = _process_server_tool_calls(serialized, vector_store_id)
+            generated_files.extend(tool_results.get("generated_files", []))
             generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
+            tool_messages = tool_results.get("messages") or []
+            if tool_messages:
+                text = f"{text}\n\n" + "\n\n".join(tool_messages) if text else "\n\n".join(tool_messages)
             _log_progress(progress_log, "direct", model=CHAT_MODEL, delegated=False)
             return jsonify({
                 "text": text,
@@ -892,6 +962,7 @@ def create_app() -> Flask:
                 "output": serialized.get("output"),
                 "output_text": serialized.get("output_text"),
                 "choices": serialized.get("choices"),
+                "response_payload": serialized,
                 "router_decision": router_decision.to_dict() if router_decision else None,
                 "progress_log": progress_log,
             })
@@ -1067,6 +1138,7 @@ def create_app() -> Flask:
             return jsonify(_serialize(resp))
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+
 
     return app
 
