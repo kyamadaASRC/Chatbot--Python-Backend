@@ -221,11 +221,14 @@ export function renderFileList(files = []) {
     div.dataset.name = displayName;
     if (file.vector_store_id) div.dataset.vectorStoreId = file.vector_store_id;
     if (file.container_file_id) div.dataset.containerFileId = file.container_file_id;
+    if (file.container_id) div.dataset.containerId = file.container_id;
     if (file.mime || file.mimetype) div.dataset.mime = file.mime || file.mimetype;
-    if (file.preview_url || file.previewUrl) {
+    // Prefer container download URLs when available, then explicit preview_url; do NOT default to files API.
+    if (file.container_id && file.container_file_id) {
+      const encodedName = encodeURIComponent(displayName);
+      div.dataset.previewUrl = `/v1/containers/${file.container_id}/files/${file.container_file_id}/content?name=${encodedName}`;
+    } else if (file.preview_url || file.previewUrl) {
       div.dataset.previewUrl = file.preview_url || file.previewUrl;
-    } else if (fileId) {
-      div.dataset.previewUrl = `/v1/files/${fileId}/content`;
     }
 
     div.innerHTML = `

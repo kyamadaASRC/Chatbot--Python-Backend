@@ -21,8 +21,8 @@ export class ChatClient {
 
     const sysPrompt = systemPrompt?.trim()
       ? systemPrompt
-      : `You are a helpful assistant. You can use the tools 'generate_pdf', 'generate_docx', and 'generate_xlsx' to create downloadable artifacts.
-         When the user requests a document or report, call generate_pdf or generate_docx with your response in raw Markdown (and an optional filename). For tabular deliverables, call generate_xlsx with one or more worksheets.
+      : `You are a helpful assistant. You can use the tools 'generate_pdf' and 'generate_xlsx' to create downloadable artifacts.
+         When the user requests a document or report, call generate_pdf with your response in raw Markdown (and an optional filename). For tabular deliverables, call generate_xlsx with one or more worksheets.
          Respond using Markdown syntax for code, but do not include additional Markdown fences inside other code blocks. 
          When outputting code, always wrap it in fenced Markdown code blocks (\`\`\`) so it renders as text, not executable HTML.
          Always leave a blank line before and after fenced code blocks.
@@ -83,26 +83,6 @@ export class ChatClient {
           markdown_text: {
             type: "string",
             description: "The Markdown content to be converted into a PDF document.",
-          },
-        },
-        required: ["markdown_text"],
-      },
-    });
-
-    tools.push({
-      type: "function",
-      name: "generate_docx",
-      description: "Convert markdown text into a .docx document.",
-      parameters: {
-        type: "object",
-        properties: {
-          markdown_text: {
-            type: "string",
-            description: "The Markdown content that should be converted into DOCX paragraphs/headings.",
-          },
-          filename: {
-            type: "string",
-            description: "Optional name for the generated .docx file.",
           },
         },
         required: ["markdown_text"],

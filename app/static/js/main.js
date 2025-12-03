@@ -83,40 +83,9 @@ function updateSpinnerToast(toastEl, message) {
   toastEl.textContent = message;
 }
 
-// Ping /v1/router/preview so we can inform the user what is about to happen.
+// Legacy stub: router/preview removed; return no-op metadata.
 async function previewRouterDecision(message) {
-  if (!message) return { decision: null, consultants: [], toasts: [] };
-  const routingToast = showSpinnerToast("Routing your request…");
-  const handles = [routingToast];
-  try {
-    const historyPayload = buildRouterHistoryPayload(sessionManager.getHistory() || []);
-    const res = await fetch("/v1/router/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, history: historyPayload }),
-    });
-    if (!res.ok) {
-      throw new Error(`Router preview failed (${res.status})`);
-    }
-    const data = await res.json().catch(() => ({}));
-    const decision = data?.decision || null;
-    const consultants = Array.isArray(data?.consultants) ? data.consultants : [];
-    if (decision?.mode === "single" && consultants.length) {
-      updateSpinnerToast(routingToast, `Calling ${consultants[0].display_name || "consultant"}…`);
-    } else if (decision?.mode === "parallel") {
-      const count = consultants.length || 2;
-      updateSpinnerToast(routingToast, `Engaging ${count} consultant${count === 1 ? "" : "s"}…`);
-      const summaryToast = showSpinnerToast("Summarizing consultant results…");
-      handles.push(summaryToast);
-    } else {
-      updateSpinnerToast(routingToast, "Using general assistant…");
-    }
-    return { decision, consultants, toasts: handles };
-  } catch (err) {
-    console.warn("Router preview failed:", err);
-    handles.forEach((toast) => dismissToast(toast));
-    return { decision: null, consultants: [], toasts: [] };
-  }
+  return { decision: null, consultants: [], toasts: [] };
 }
 
 function dismissProgressToasts(handles = []) {
@@ -688,6 +657,9 @@ scrollDownBtn?.addEventListener("click", () => {
     sessionManager.addMessageToCurrent("user", text);
     sessionManager.addMessageToCurrent("assistant", finalText);
     renderAssistantMessage(finalText);
+    if (response?.generated_files) {
+      renderGeneratedPreviews(response.generated_files);
+    }
     renderConsultantNotesSection(response);
     await handleToolCallsIfAny(response);
     await sessionManager.updateSessionSummarySafe(text, finalText);
@@ -747,3 +719,48 @@ async function initialize() {
 }
 
 document.addEventListener("DOMContentLoaded", initialize);
+// Render inline preview cards for generated artifacts (PDF inline; DOCX with download link).
+function renderGeneratedPreviews(files = []) {
+  if (!chatHistory || !Array.isArray(files) || !files.length) return;
+
+  const getLink = (f) => {
+    const name = f.name || f.filename || "";
+    const cid = f.container_id || f.containerId;
+    const cfile = f.container_file_id || f.containerFileId;
+    if (cid && cfile) return `/v1/containers/${cid}/files/${cfile}/content?name=${encodeURIComponent(name || cfile)}`;
+    if (f.preview_url || f.previewUrl) return f.preview_url || f.previewUrl;
+    return null;
+  };
+
+  files.forEach((file) => {
+    const name = (file.name || file.filename || "").toLowerCase();
+    const mime = (file.mime || file.mimetype || "").toLowerCase();
+    const link = getLink(file);
+    if (!link) return;
+
+    if (mime.includes("pdf") || name.endsWith(".pdf")) {
+      const card = document.createElement("div");
+      card.className = "assistant-message pdf-preview-card";
+      card.innerHTML = `
+        <div class="preview-header">PDF Preview: ${file.name || file.id}</div>
+        <div class="preview-body">
+          <iframe src="${link}" title="PDF preview" loading="lazy"></iframe>
+        </div>
+        <div class="preview-actions">
+          <a href="${link}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+        </div>
+      `;
+      chatHistory.appendChild(card);
+    } else if (mime.includes("word") || name.endsWith(".docx")) {
+      const card = document.createElement("div");
+      card.className = "assistant-message pdf-preview-card";
+      card.innerHTML = `
+        <div class="preview-header">DOCX Generated: ${file.name || file.id}</div>
+        <div class="preview-actions">
+          <a href="${link}" target="_blank" rel="noopener noreferrer">Download DOCX</a>
+        </div>
+      `;
+      chatHistory.appendChild(card);
+    }
+  });
+}

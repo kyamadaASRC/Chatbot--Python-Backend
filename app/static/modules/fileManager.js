@@ -462,7 +462,8 @@ uploadedFileList?.addEventListener("click", async (e) => {
   if (!fileId) return;
 
   const session = window.sessionManager?.getCurrentSession?.(); 
-  const containerId = 
+  const containerId =
+    item.dataset.containerId ||
     window.current_container_id ||
     window.sessionManager?.getCurrentSession?.()?.container_id;
    
@@ -515,7 +516,9 @@ uploadedFileList?.addEventListener("click", async (e) => {
     closeAllFileMenus();
     const previewUrl = item.dataset.previewUrl;
     const name = item.dataset.name || fileRecord?.name || fileId;
-    if (previewUrl) {
+    const containerFileIdAttr = item.dataset.containerFileId || fileRecord?.container_file_id;
+    // Prefer local/preview URLs first (only if not pointing to OpenAI files API)
+    if (previewUrl && (previewUrl.startsWith("/local_files") || previewUrl.startsWith("blob:") || previewUrl.startsWith("data:"))) {
       try {
         const resp = await fetch(previewUrl);
         if (!resp.ok) throw new Error(`Download failed (${resp.status})`);
@@ -534,23 +537,27 @@ uploadedFileList?.addEventListener("click", async (e) => {
       }
       return;
     }
-    // Fallback: server proxy
-    try {
-      const res = await fetch(apiUrl(`/v1/files/${fileId}/content`));
-      if (!res.ok) throw new Error(`Download failed (${res.status})`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.warn("Download failed:", err);
-      showToast("⚠️ Download failed", "error", 2500);
+    if (containerId && containerFileIdAttr) {
+      try {
+        const res = await fetch(apiUrl(`/v1/containers/${containerId}/files/${containerFileIdAttr}/content?name=${encodeURIComponent(name)}`));
+        if (!res.ok) throw new Error(`Download failed (${res.status})`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      } catch (err) {
+        console.warn("Container download failed:", err);
+        showToast("⚠️ Download failed", "error", 2500);
+      }
     }
+    // No allowed download path
+    showToast("⚠️ Download unavailable (no container/local preview)", "error", 2500);
     return;
   }
 

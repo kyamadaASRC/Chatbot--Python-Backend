@@ -1,4 +1,4 @@
-"""Flask application that orchestrates consultants, resources, and chat UI helpers."""
+"""Flask application for chat, template selection/editing, and file helpers."""
 
 import copy
 import io
@@ -8,7 +8,6 @@ import json
 import re
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
@@ -16,47 +15,111 @@ from flask_cors import CORS
 from docx import Document
 from openpyxl import Workbook
 
-from app.consultants import (
-    run_consultant_response,
-    DEFAULT_CONSULTANT_KEY,
-    CONSULTANTS,
-    list_consultants,
-    get_consultant_overview,
-    _extract_id,
-    DOC_TOOL_SPECS as CONSULTANT_DOC_TOOL_SPECS,
-)
-from app.consultant_router import route_consultants, RouterDecision, describe_decision
 from app.openai_client import client
+import openai
 from app.Select_Edit_Docx import select_and_edit_docx
+from app.consultants import _extract_id
 
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
-SUMMARY_MODEL = os.getenv("SUMMARY_MODEL") or "gpt-5-mini"
+RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "240"))
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
 Tool hand-offs:
-- Delegate to consultants via call_<consultant> when their scope fits better than answering directly.
-- When reading user uploads, call file_search first (session + consultant stores are linked) or code_interpreter to inspect/transform files.
-- To return documents, call generate_pdf(markdown_text=...), generate_docx(markdown_text=..., filename=...), or generate_xlsx(...).
+- When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
+- To return documents, call generate_pdf(markdown_text=...) or generate_xlsx(...).
+- Use select_and_edit_docx to pick a template from the manifest store and optionally apply edits.
 - Use web_search_preview or code_interpreter when they materially improve the answer.
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
-PARALLEL_SUMMARY_SYSTEM = """You orchestrate multiple consultant agents. Summarize their findings into a cohesive answer for the acquisition team.
-- Tie recommendations back to the user's question.
-- Highlight conflicts or gaps between consultants.
-- Mention which consultant provided critical insights.
-Respond concisely but cover the major points."""
-CONSULTANT_TOOL_PREFIX = "call_"
 DIRECT_TOOL_NAMES = [
     "file_search",
     "generate_pdf",
-    "generate_docx",
     "generate_xlsx",
     "web_search_preview",
     "code_interpreter",
     "select_and_edit_docx",
 ]
-DOC_TOOL_SPECS = CONSULTANT_DOC_TOOL_SPECS
+
+# Tool specs for direct assistant calls (docs + template selection/edit).
+DOC_TOOL_SPECS = [
+    {
+        "type": "function",
+        "name": "generate_pdf",
+        "description": "Convert markdown text into a downloadable PDF.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "markdown_text": {
+                    "type": "string",
+                    "description": "The Markdown content to be converted into a PDF document.",
+                },
+            },
+            "required": ["markdown_text"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "generate_xlsx",
+        "description": "Create an .xlsx workbook from structured row data.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "Optional name for the generated .xlsx file.",
+                },
+                "sheets": {
+                    "type": "array",
+                    "description": "List of worksheets to include. Each sheet must define a name and rows.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Worksheet name (31 chars max)."},
+                            "rows": {
+                                "type": "array",
+                                "description": "Rows of data; each row is an array of cell values.",
+                                "items": {
+                                    "type": "array",
+                                    "items": {},
+                                },
+                            },
+                        },
+                        "required": ["rows"],
+                    },
+                },
+            },
+            "required": ["sheets"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "select_and_edit_docx",
+        "description": "Pick the best-matching DOCX template from the manifest store and optionally apply edits.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "User request that describes the needed template.",
+                },
+                "edit_instructions": {
+                    "type": "string",
+                    "description": "Optional instructions to apply to the selected template.",
+                },
+                "file_id": {
+                    "type": "string",
+                    "description": "Optional file_id to edit directly (skips template selection).",
+                },
+                "vector_store_id": {
+                    "type": "string",
+                    "description": "Optional vector store to attach generated files to.",
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
+]
 _TOOL_LOGGED = False
 
 
@@ -117,20 +180,58 @@ def _link_files_to_vector_store(
 
 def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, Any]:
     """Build the metadata object that the UI expects for downloadable files."""
+    def _guess_mime(name: str) -> Optional[str]:
+        lowered = name.lower()
+        if lowered.endswith(".pdf"):
+            return "application/pdf"
+        if lowered.endswith(".docx"):
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if lowered.endswith(".xlsx"):
+            return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if lowered.endswith(".json"):
+            return "application/json"
+        if lowered.endswith(".txt"):
+            return "text/plain"
+        return None
+
+    def _cache_file_locally(name: str) -> Optional[str]:
+        """Attempt to download from OpenAI and cache for browser preview; return local URL."""
+        safe_name = _sanitize_filename(name, Path(name).suffix or ".bin")
+        local_dir = Path("artifacts/generated_files")
+        local_dir.mkdir(parents=True, exist_ok=True)
+        target = local_dir / f"{file_id}_{safe_name}"
+        try:
+            content = client.files.content(file_id)
+            data = content.read() if hasattr(content, "read") else content
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            if not isinstance(data, (bytes, bytearray)):
+                return None
+            target.write_bytes(data)
+            return f"/local_files/{target.name}"
+        except Exception as exc:
+            print(f"[local-cache] Failed to cache file {file_id}: {exc}")
+            return None
+
     try:
         # Grab file info from OpenAI so filenames + sizes stay accurate when the UI renders them.
         meta = client.files.retrieve(file_id)
         data = _ensure_dict(meta)
     except Exception:
         data = {}
+    name = data.get("filename") or data.get("display_name") or file_id
+    mime = data.get("mime_type") or _guess_mime(name)
+    preview_url = _cache_file_locally(name)
     return {
         "id": file_id,
         "openai_file_id": file_id,
-        "name": data.get("filename") or data.get("display_name") or file_id,
+        "name": name,
         "size": data.get("bytes"),
         "vector_store_id": None,
         "created_at": data.get("created_at"),
         "source": source,
+        "mime": mime,
+        "preview_url": preview_url,
     }
 
 
@@ -264,12 +365,25 @@ def _coerce_tool_args(entry: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str]) -> Dict[str, Any]:
+def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[str], container_id: Optional[str] = None) -> Dict[str, Any]:
     """Look for server-side function calls (DOCX/XLSX/selection) and synthesize files."""
     generated: List[Dict[str, Any]] = []
     messages: List[str] = []
     active_vector_store = vector_store_id
     outputs = data.get("output") or []
+    container_id = container_id or data.get("container_id") or None
+    # Capture any container file ids emitted by code interpreter
+    container_file_map: Dict[str, str] = {}
+    for entry in outputs:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "output_file":
+            continue
+        cid = entry.get("container_id") or entry.get("container", {}).get("id")
+        cfile = entry.get("file_id") or entry.get("id")
+        if cid and cfile:
+            container_file_map[cfile] = cid
+
     for entry in outputs:
         entry_type = entry.get("type")
         if entry_type not in ("function_call", "output_tool_call"):
@@ -278,9 +392,7 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
         if not name:
             continue
         args = _coerce_tool_args(entry)
-        if name == "generate_docx":
-            generated.extend(_handle_generate_docx_tool(args, active_vector_store))
-        elif name == "generate_xlsx":
+        if name == "generate_xlsx":
             generated.extend(_handle_generate_xlsx_tool(args, active_vector_store))
         elif name == "select_and_edit_docx":
             prompt = (args.get("prompt") or "").strip()
@@ -296,6 +408,9 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
                 file_id=file_id,
                 vector_store_id=target_vs,
             )
+            # Prefer any container_id hinted by the tool itself if we didn't see it in outputs
+            if not container_id and result.get("container_id"):
+                container_id = result["container_id"]
             if result.get("message"):
                 messages.append(result["message"])
             result_vs = result.get("vector_store_id") or target_vs
@@ -305,9 +420,36 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
             if output_file_ids:
                 effective_vs = result_vs or target_vs
                 if effective_vs:
-                    generated.extend(_link_files_to_vector_store(output_file_ids, effective_vs))
+                    linked = _link_files_to_vector_store(output_file_ids, effective_vs)
+                    # annotate with container ids if we have them
+                    for rec in linked:
+                        cid = container_file_map.get(rec["openai_file_id"])
+                        if not cid:
+                            cid = container_id
+                        if cid:
+                            rec["container_id"] = container_id or cid
+                            rec["container_file_id"] = rec["openai_file_id"]
+                    generated.extend(linked)
                 else:
-                    generated.extend([_fetch_file_metadata(fid) for fid in output_file_ids if fid])
+                    for fid in output_file_ids:
+                        rec = _fetch_file_metadata(fid)
+                        cid = container_file_map.get(fid)
+                        if not cid:
+                            cid = container_id
+                        if cid:
+                            rec["container_id"] = container_id or cid
+                            rec["container_file_id"] = fid
+                        generated.append(rec)
+            # Attach locally cached files from base64 outputs, if present
+            local_files = result.get("local_files") or []
+            for lf in local_files:
+                generated.append(lf)
+    # If any generated entries match container_file_map, enrich them
+    for rec in generated:
+        fid = rec.get("openai_file_id") or rec.get("id")
+        if fid and fid in container_file_map:
+            rec["container_id"] = container_id or container_file_map[fid]
+            rec["container_file_id"] = fid
     return {
         "generated_files": generated,
         "messages": messages,
@@ -336,80 +478,13 @@ def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], limit:
     return cleaned
 
 
-def _build_consultant_tool_specs() -> List[Dict[str, Any]]:
-    """Expose each consultant as a callable tool so the general model can delegate work."""
-    specs: List[Dict[str, Any]] = []
-    for key, meta in CONSULTANTS.items():
-        display = meta.get("display_name", key)
-        summary = meta.get("summary") or f"Delegate acquisition tasks handled by {display}."
-        specs.append(
-            {
-                "type": "function",
-                "name": f"{CONSULTANT_TOOL_PREFIX}{key}",
-                "description": summary,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {
-                            "type": "string",
-                            "description": "User request to provide to the consultant.",
-                        },
-                        "context": {
-                            "type": "string",
-                            "description": "Additional background or notes for the consultant.",
-                        },
-                        "vector_store_id": {
-                            "type": "string",
-                            "description": "Override vector store id for this call (optional).",
-                        },
-                        "container_id": {
-                            "type": "string",
-                            "description": "Override code interpreter container id (optional).",
-                        },
-                    },
-                },
-            }
-        )
-    return specs
-
-
-CONSULTANT_TOOL_SPECS = _build_consultant_tool_specs()  # Cache tool schemas once so every request reuses the same payload.
-
-
-def _extract_consultant_tool_calls(outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Find consultant tool invocations embedded in a Responses payload."""
-    calls: List[Dict[str, Any]] = []
-    for entry in outputs:
-        if not isinstance(entry, dict):
-            continue
-        entry_type = entry.get("type")
-        if entry_type not in ("function_call", "output_tool_call"):
-            continue
-        name = entry.get("name") or entry.get("function", {}).get("name")
-        if not name or not name.startswith(CONSULTANT_TOOL_PREFIX):
-            continue
-        consultant_key = name[len(CONSULTANT_TOOL_PREFIX) :]
-        if consultant_key not in CONSULTANTS:
-            continue
-        calls.append(
-            {
-                "tool_name": name,
-                "consultant_key": consultant_key,
-                "arguments": _coerce_tool_args(entry),
-            }
-        )
-    return calls
-
 
 def create_app() -> Flask:
     """Application factory so tests and gunicorn can import the same Flask instance."""
     app = Flask(__name__)
     CORS(app)  # enable CORS for all routes
     global _TOOL_LOGGED
-    # These tool names are exposed to Responses so consultant personas can be invoked via tool calls.
-    consultant_tools = [f"{CONSULTANT_TOOL_PREFIX}{key}" for key in CONSULTANTS]
     if not _TOOL_LOGGED:
-        print(f"[consultant-tools] Registered tool calls: {consultant_tools}")
         print(f"[direct-tools] Built-in tools: {DIRECT_TOOL_NAMES}")
         _TOOL_LOGGED = True
 
@@ -493,240 +568,6 @@ def create_app() -> Flask:
         return ""
 
 
-    def _invoke_consultant_run(
-        message: str,
-        project: str,
-        vector_store_id: Optional[str],
-        container_id: Optional[str],
-        consultant_key: str,
-    ) -> Dict[str, Any]:
-        """Execute a single consultant and normalize its response for downstream consumers."""
-        started = time.time()
-        result = run_consultant_response(
-            message,
-            vector_store_id=vector_store_id,
-            container_id=container_id,
-            consultant_key=consultant_key,
-        )
-        text = (result.get("text") or "").strip() or "The consultant returned no notes."
-        file_ids = result.get("file_ids") or []
-        response_payload = result.get("response_payload") or {}
-        tool_results = _process_server_tool_calls(response_payload, vector_store_id)
-        generated_files = tool_results.get("generated_files", [])
-        generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
-        tool_messages = tool_results.get("messages") or []
-        if tool_messages:
-            text = f"{text}\n\n" + "\n\n".join(tool_messages)
-        meta = CONSULTANTS.get(consultant_key, {})
-        return {
-            "question": message,
-            "project": project,
-            "consultant": result.get("consultant", consultant_key),
-            "display_name": result.get("display_name") or meta.get("display_name", consultant_key),
-            "text": text,
-            "model": result.get("model"),
-            "file_ids": file_ids,
-            "generated_files": generated_files,
-            "resources": meta.get("local_files", []),
-            "response_payload": response_payload,
-            "duration_ms": int((time.time() - started) * 1000),
-        }
-
-
-    def _consultant_tool_call(
-        message: str,
-        project: str,
-        vector_store_id: Optional[str],
-        container_id: Optional[str],
-        consultant_key: str,
-        router_decision: Optional[RouterDecision] = None,
-        progress_log: Optional[List[Dict[str, Any]]] = None,
-    ):
-        """Legacy call path that wraps `_invoke_consultant_run` in the tool-call shim."""
-        tool_name = f"{CONSULTANT_TOOL_PREFIX}{consultant_key}"
-        run_payload = _invoke_consultant_run(
-            message,
-            project,
-            vector_store_id,
-            container_id,
-            consultant_key,
-        )
-        _log_progress(
-            progress_log,
-            "consultant",
-            consultant=run_payload["consultant"],
-            display_name=run_payload["display_name"],
-            duration_ms=run_payload.get("duration_ms"),
-        )
-        print(f"[consultant-tool] Executed {tool_name} ({run_payload['display_name']}) with model {run_payload.get('model')}")
-        tool_args = {
-            "question": message,
-            "project": project,
-            "vector_store_id": vector_store_id,
-            "container_id": container_id,
-            "consultant_key": consultant_key,
-        }
-        call_stub = {
-            "type": "function_call",
-            "name": tool_name,
-            "arguments": tool_args,
-        }
-        response_stub = {
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type": "text", "text": run_payload["text"]}],
-        }
-        return {
-            "text": run_payload["text"],
-            "mode": "consultant",
-            "tool_name": tool_name,
-            "consultant": run_payload["consultant"],
-            "consultant_display": run_payload["display_name"],
-            "model": run_payload.get("model"),
-            "file_ids": run_payload.get("file_ids"),
-            "generated_files": run_payload.get("generated_files"),
-            "resources": run_payload.get("resources"),
-            "router_decision": router_decision.to_dict() if router_decision else None,
-            "progress_log": progress_log,
-            "output": [call_stub, response_stub],
-        }
-
-
-    def _summarize_consultant_results(
-        message: str,
-        consultant_runs: List[Dict[str, Any]],
-        summary_prompt: Optional[str],
-        vector_store_id: Optional[str],
-    ) -> Dict[str, Any]:
-        """Ask the general chat model to merge multiple consultant notes into one answer."""
-        summary_system = summary_prompt or PARALLEL_SUMMARY_SYSTEM
-        lines = [f"User question:\n{message.strip()}"]
-        for run in consultant_runs:
-            lines.append(
-                f"\nConsultant: {run['display_name']} ({run['consultant']})\nNotes:\n{run.get('text') or 'No notes provided.'}"
-            )
-        compiled = "\n".join(lines)
-        started = time.time()
-        resp = client.responses.create(
-            model=SUMMARY_MODEL,
-            input=[
-                {"role": "system", "content": summary_system},
-                {"role": "user", "content": compiled},
-            ],
-        )
-        duration_ms = int((time.time() - started) * 1000)
-        serialized = _ensure_dict(resp)
-        text = _extract_text(resp) or "Summary was not generated."
-        file_ids = getattr(resp, "output_file_ids", None) or []
-        tool_results = _process_server_tool_calls(serialized, vector_store_id)
-        generated_files = tool_results.get("generated_files", [])
-        generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
-        tool_messages = tool_results.get("messages") or []
-        if tool_messages:
-            text = f"{text}\n\n" + "\n\n".join(tool_messages)
-        return {
-            "text": text,
-            "file_ids": file_ids,
-            "generated_files": generated_files,
-            "response": serialized,
-            "duration_ms": duration_ms,
-        }
-
-
-    def _run_parallel_consultants(
-        message: str,
-        project: str,
-        vector_store_id: Optional[str],
-        container_id: Optional[str],
-        consultant_keys: List[str],
-        router_decision: Optional[RouterDecision],
-        progress_log: Optional[List[Dict[str, Any]]],
-    ):
-        """Execute multiple consultants concurrently and merge their answers."""
-        if not consultant_keys:
-            raise ValueError("At least one consultant key is required for parallel execution.")
-
-        runs: List[Dict[str, Any]] = []
-        failures: List[Dict[str, Any]] = []
-        aggregated_files: List[Dict[str, Any]] = []
-
-        with ThreadPoolExecutor(max_workers=min(len(consultant_keys), 4)) as executor:
-            # Fan out each consultant call and keep track of which future maps to which key.
-            future_map = {
-                executor.submit(
-                    _invoke_consultant_run,
-                    message,
-                    project,
-                    vector_store_id,
-                    container_id,
-                    key,
-                ): key
-                for key in consultant_keys
-            }
-            for future in as_completed(future_map):
-                key = future_map[future]
-                try:
-                    run_payload = future.result()
-                    runs.append(run_payload)
-                    aggregated_files.extend(run_payload.get("generated_files") or [])
-                    _log_progress(
-                        progress_log,
-                        "consultant",
-                        consultant=run_payload["consultant"],
-                        display_name=run_payload["display_name"],
-                        duration_ms=run_payload.get("duration_ms"),
-                    )
-                    print(f"[consultant-tool] Parallel run completed for {run_payload['display_name']} ({run_payload['consultant']})")
-                except Exception as exc:  # pragma: no cover - diagnostic
-                    error_text = str(exc)
-                    failures.append({"consultant": key, "error": error_text})
-                    _log_progress(
-                        progress_log,
-                        "consultant_error",
-                        consultant=key,
-                        error=error_text,
-                    )
-
-        if not runs:
-            raise RuntimeError("All consultant calls failed.")
-
-        summary = _summarize_consultant_results(
-            message,
-            runs,
-            router_decision.summary_prompt if router_decision else None,
-            vector_store_id,
-        )
-        aggregated_files.extend(summary.get("generated_files") or [])
-        _log_progress(
-            progress_log,
-            "summary",
-            duration_ms=summary.get("duration_ms"),
-        )
-        consultant_notes = {run["consultant"]: run.get("text", "") for run in runs}
-        return {
-            "mode": "parallel",
-            "text": summary.get("text"),
-            "summary": summary.get("text"),
-            "consultant_notes": consultant_notes,
-            "consultants": [
-                {
-                    "consultant": run["consultant"],
-                    "display_name": run["display_name"],
-                    "text": run.get("text"),
-                    "model": run.get("model"),
-                    "file_ids": run.get("file_ids"),
-                    "generated_files": run.get("generated_files"),
-                    "resources": run.get("resources"),
-                }
-                for run in runs
-            ],
-            "file_ids": summary.get("file_ids"),
-            "generated_files": aggregated_files,
-            "router_decision": router_decision.to_dict() if router_decision else None,
-            "progress_log": progress_log,
-            "failures": failures,
-            "summary_response": summary.get("response"),
-        }
 
     @app.route("/chat", methods=["POST"])
     def chat():
@@ -735,225 +576,70 @@ def create_app() -> Flask:
         project = data.get("project", "demo-project")
         vector_store_id = data.get("vector_store_id")
         container_id = data.get("container_id")
-        requested_consultant = data.get("consultant_key")
         incoming_tools = data.get("tools")
-        router_payload = data.get("router_decision")
         history_payload = data.get("history")
-        files_payload = data.get("files")
-        # The general assistant needs the recent transcript so pronouns like "this" resolve before tool calls fire.
         history_messages = _normalize_history_for_model(history_payload)
         if not msg:
             return jsonify({"error": "Missing message"}), 400
-
-        # Track router + execution steps so the client can show progress indicators.
-        router_decision = None
-        progress_log: List[Dict[str, Any]] = []
-        consultant_key = None
-        forced_direct = False
-        fallback_mode: Optional[str] = None
-        if requested_consultant:
-            if requested_consultant not in CONSULTANTS:
-                return jsonify({"error": f"Unknown consultant '{requested_consultant}'"}), 400
-            consultant_key = requested_consultant
-        else:
-            # Accept a client-provided router hint if the UI already ran one, otherwise run the router locally.
-            forced_direct = _should_force_direct(msg)
-            if forced_direct:
-                router_decision = RouterDecision(mode="direct", reason="forced_direct_tool_request")
-                _log_progress(progress_log, "forced_direct", trigger="tool_request")
-            else:
-                router_decision = RouterDecision.from_dict(router_payload)
-                if not router_decision:
-                    router_decision = route_consultants(msg, history=history_messages, files=files_payload)
-            _log_progress(progress_log, "router", mode=router_decision.mode)
-            if router_decision.mode in ("single", "parallel"):
-                fallback_mode = router_decision.mode
-                # Hint which consultants were planned so the assistant can delegate appropriately.
-                planned = router_decision.selected_consultants()
-                if planned:
-                    _log_progress(progress_log, "router_plan", consultants=planned)
-
-        if consultant_key:
-            try:
-                if router_decision and router_decision.mode == "single":
-                    _log_progress(
-                        progress_log,
-                        "consultant_selected",
-                        consultant=consultant_key,
-                        reason=router_decision.reason,
-                    )
-                elif requested_consultant:
-                    _log_progress(
-                        progress_log,
-                        "consultant_selected",
-                        consultant=consultant_key,
-                        reason="user_override",
-                    )
-                payload = _consultant_tool_call(
-                    msg,
-                    project,
-                    vector_store_id,
-                    container_id,
-                    consultant_key,
-                    router_decision=router_decision,
-                    progress_log=progress_log,
-                )
-                return jsonify(payload)
-            except Exception as exc:
-                return jsonify({"error": str(exc)}), 500
-
         try:
-            # No consultant selected, so fall back to the general chat model with whatever tools were requested.
             tools: List[Dict[str, Any]] = []
             if isinstance(incoming_tools, list):
                 for tool in incoming_tools:
                     if not isinstance(tool, dict):
                         continue
                     sanitized = dict(tool)
-                    # Ensure the session's container ID is passed through so code interpreter calls stay sticky.
+                    if sanitized.get("name") == "generate_docx":
+                        continue  # disabled
                     if sanitized.get("type") == "code_interpreter":
-                        if container_id:
-                            sanitized["container"] = container_id
-                        else:
-                            sanitized["container"] = {"type": "auto"}
+                        sanitized["container"] = container_id or {"type": "auto"}
                     tools.append(sanitized)
 
             if vector_store_id:
-                # Prepend file_search so the assistant can reference session uploads even in direct mode.
-                has_file_search = any(
-                    isinstance(tool, dict) and tool.get("type") == "file_search"
-                    for tool in tools
-                )
+                has_file_search = any(isinstance(t, dict) and t.get("type") == "file_search" for t in tools)
                 if not has_file_search:
                     tools.insert(0, {"type": "file_search", "vector_store_ids": [vector_store_id]})
 
-            # If the router suggested specific tools, make sure they are present even if the client omitted them.
-            suggested = (router_decision.suggested_tools if router_decision else []) or []
-            for suggestion in suggested:
-                candidate: Optional[Dict[str, Any]] = None
-                if suggestion == "code_interpreter":
-                    candidate = {"type": "code_interpreter", "container": container_id or {"type": "auto"}}
-                elif suggestion == "file_search" and vector_store_id:
-                    candidate = {"type": "file_search", "vector_store_ids": [vector_store_id]}
-                else:
-                    match = next((spec for spec in DOC_TOOL_SPECS if spec.get("name") == suggestion), None)
-                    if match:
-                        candidate = copy.deepcopy(match)
-                if not candidate:
-                    continue
-                already = False
-                for tool in tools:
-                    if tool.get("name") == candidate.get("name") or tool.get("type") == candidate.get("type"):
-                        already = True
-                        break
+            # Ensure doc tools + select/edit are available.
+            for spec in DOC_TOOL_SPECS:
+                already = any(
+                    (t.get("name") == spec.get("name")) or (t.get("type") == spec.get("type"))
+                    for t in tools
+                )
                 if not already:
-                    tools.append(candidate)
-            if suggested:
-                _log_progress(progress_log, "tools_enhanced", suggested_tools=suggested)
+                    tools.append(copy.deepcopy(spec))
 
-            # Surface every consultant as a callable function tool so the general model can delegate mid-conversation.
-            for spec in CONSULTANT_TOOL_SPECS:
-                tools.append(copy.deepcopy(spec))
-
-            convo_input: List[Dict[str, str]] = [
-                {"role": "system", "content": GENERAL_CHAT_SYSTEM},
-            ]
-            if suggested:
-                convo_input.append({"role": "system", "content": f"Tool preference: consider using {', '.join(suggested)} if helpful."})
+            convo_input: List[Dict[str, str]] = [{"role": "system", "content": GENERAL_CHAT_SYSTEM}]
             convo_input.extend(history_messages)
             convo_input.append({"role": "user", "content": msg})
-            resp = client.responses.create(
-                model=CHAT_MODEL,
-                input=convo_input, #type: ignore
-                tools=tools or None, # type: ignore
-            )
+            # Retry transient connection errors to OpenAI a few times with backoff.
+            resp = None
+            for attempt in range(3):
+                try:
+                    resp = client.responses.create(
+                        model=CHAT_MODEL,
+                        input=convo_input, # type: ignore
+                        tools=tools or None, # type: ignore
+                        timeout=RESPONSE_TIMEOUT,
+                    )
+                    break
+                except Exception as exc:
+                    if isinstance(exc, openai.APITimeoutError):
+                        print(f"[openai-timeout] attempt {attempt+1} timed out")
+                    # jittered backoff to avoid thundering herd on retries
+                    if attempt == 2:
+                        raise
+                    delay = 2 * (attempt + 1) + (0.5 * (attempt + 1))
+                    time.sleep(delay)
             serialized = _ensure_dict(resp)
-            consultant_calls = _extract_consultant_tool_calls(serialized.get("output") or [])
-            if consultant_calls:
-                # Execute only the first consultant tool request; follow-up calls will be handled by the next round trip.
-                primary = consultant_calls[0]
-                if len(consultant_calls) > 1:
-                    print(f"[consultant-tools] Multiple consultant tool calls detected; executing {primary['tool_name']} first.")
-                args = primary.get("arguments") or {}
-                delegated_question = args.get("question") or msg
-                context = args.get("context")
-                if context:
-                    context = context.strip()
-                if delegated_question:
-                    delegated_question = delegated_question.strip()
-                if delegated_question and context:
-                    delegated_question = f"{delegated_question}\n\nAdditional context:\n{context}"
-                elif context and not delegated_question:
-                    delegated_question = context
-                delegated_question = delegated_question or msg
-                delegated_vector_store = args.get("vector_store_id") or vector_store_id
-                delegated_container = args.get("container_id") or container_id
-                try:
-                    _log_progress(
-                        progress_log,
-                        "consultant_tool_delegate",
-                        tool=primary["tool_name"],
-                        consultant=primary["consultant_key"],
-                    )
-                    payload = _consultant_tool_call(
-                        delegated_question,
-                        project,
-                        delegated_vector_store,
-                        delegated_container,
-                        primary["consultant_key"],
-                        router_decision=router_decision,
-                        progress_log=progress_log,
-                    )
-                    payload["triggered_tool"] = primary["tool_name"]
-                    payload["triggered_by_general_model"] = True
-                    return jsonify(payload)
-                except Exception as exc:
-                    return jsonify({"error": str(exc)}), 500
-            # If the model did not delegate, honor the router's plan as a fallback and log it.
-            if fallback_mode == "parallel" and router_decision:
-                keys = router_decision.selected_consultants()
-                _log_progress(progress_log, "fallback_parallel_shortcircuit", consultants=keys)
-                try:
-                    payload = _run_parallel_consultants(
-                        msg,
-                        project,
-                        vector_store_id,
-                        container_id,
-                        keys,
-                        router_decision,
-                        progress_log,
-                    )
-                    payload["fallback_shortcircuit"] = "parallel"
-                    return jsonify(payload)
-                except Exception as exc:
-                    return jsonify({"error": str(exc)}), 500
-            if fallback_mode == "single" and router_decision:
-                target = router_decision.primary or DEFAULT_CONSULTANT_KEY
-                _log_progress(progress_log, "fallback_consultant_shortcircuit", consultant=target)
-                try:
-                    payload = _consultant_tool_call(
-                        msg,
-                        project,
-                        vector_store_id,
-                        container_id,
-                        target,
-                        router_decision=router_decision,
-                        progress_log=progress_log,
-                    )
-                    payload["fallback_shortcircuit"] = "consultant"
-                    return jsonify(payload)
-                except Exception as exc:
-                    return jsonify({"error": str(exc)}), 500
             text = _extract_text(resp) or ""
             file_ids = getattr(resp, "output_file_ids", None) or []
-            generated_files = []
-            tool_results = _process_server_tool_calls(serialized, vector_store_id)
+            generated_files: List[Dict[str, Any]] = []
+            tool_results = _process_server_tool_calls(serialized, vector_store_id, container_id=container_id)
             generated_files.extend(tool_results.get("generated_files", []))
             generated_files.extend(_link_files_to_vector_store(file_ids, vector_store_id))
             tool_messages = tool_results.get("messages") or []
             if tool_messages:
                 text = f"{text}\n\n" + "\n\n".join(tool_messages) if text else "\n\n".join(tool_messages)
-            _log_progress(progress_log, "direct", model=CHAT_MODEL, delegated=False)
             return jsonify({
                 "text": text,
                 "mode": "direct",
@@ -963,28 +649,10 @@ def create_app() -> Flask:
                 "output_text": serialized.get("output_text"),
                 "choices": serialized.get("choices"),
                 "response_payload": serialized,
-                "router_decision": router_decision.to_dict() if router_decision else None,
-                "progress_log": progress_log,
             })
         except Exception as exc:
+            import traceback; traceback.print_exc()
             return jsonify({"error": str(exc)}), 500
-
-    @app.route("/v1/consultants", methods=["GET"])
-    def list_consultants_route():
-        return jsonify({
-            "consultants": list_consultants(),
-            "overview": get_consultant_overview(),
-        })
-
-    @app.route("/v1/router/preview", methods=["POST"])
-    def router_preview():
-        payload = request.get_json(force=True) or {}
-        message = (payload.get("message") or "").strip()
-        if not message:
-            return jsonify({"error": "message is required"}), 400
-        history = payload.get("history")
-        decision = route_consultants(message, history=history)
-        return jsonify(describe_decision(decision))
 
     @app.route("/v1/vector_stores", methods=["POST"])
     def create_vector_store():
@@ -1056,13 +724,49 @@ def create_app() -> Flask:
                 data = content.read()
             else:
                 data = content
+            # Try to use the original filename for download hint.
+            filename = None
+            try:
+                meta = client.files.retrieve(file_id)
+                meta_dict = _ensure_dict(meta)
+                filename = meta_dict.get("filename") or meta_dict.get("display_name")
+            except Exception:
+                filename = None
+            download_name = filename or f"{file_id}.bin"
             return send_file(
                 io.BytesIO(data), # type: ignore
-                download_name=f"{file_id}.bin",
+                download_name=download_name,
                 mimetype="application/octet-stream",
             )
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
+
+    @app.route("/v1/containers/<container_id>/files/<file_id>/content", methods=["GET"])
+    def get_container_file_content(container_id, file_id):
+        try:
+            content = client.containers.files.content(container_id=container_id, file_id=file_id) # type: ignore
+            data = content.read() if hasattr(content, "read") else content
+            if isinstance(data, str):
+                data = data.encode("utf-8")
+            download_name = request.args.get("name") or f"{file_id}.bin"
+            return send_file(
+                io.BytesIO(data), # type: ignore
+                download_name=download_name,
+                mimetype="application/octet-stream",
+            )
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/local_files/<path:fname>", methods=["GET"])
+    def get_local_file(fname):
+        local_path = Path("artifacts/generated_files") / fname
+        if not local_path.exists():
+            return jsonify({"error": "file not found"}), 404
+        return send_file(
+            local_path.open("rb"),
+            download_name=fname,
+            mimetype="application/octet-stream",
+        )
 
     @app.route("/v1/containers", methods=["POST"])
     def create_container_runtime():
