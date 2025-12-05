@@ -719,7 +719,7 @@ async function initialize() {
 }
 
 document.addEventListener("DOMContentLoaded", initialize);
-// Render inline preview cards for generated artifacts (PDF inline; DOCX with download link).
+// Render inline preview cards for generated artifacts (PDF inline).
 function renderGeneratedPreviews(files = []) {
   if (!chatHistory || !Array.isArray(files) || !files.length) return;
 
@@ -748,16 +748,6 @@ function renderGeneratedPreviews(files = []) {
         </div>
         <div class="preview-actions">
           <a href="${link}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
-        </div>
-      `;
-      chatHistory.appendChild(card);
-    } else if (mime.includes("word") || name.endsWith(".docx")) {
-      const card = document.createElement("div");
-      card.className = "assistant-message pdf-preview-card";
-      card.innerHTML = `
-        <div class="preview-header">DOCX Generated: ${file.name || file.id}</div>
-        <div class="preview-actions">
-          <a href="${link}" target="_blank" rel="noopener noreferrer">Download DOCX</a>
         </div>
       `;
       chatHistory.appendChild(card);

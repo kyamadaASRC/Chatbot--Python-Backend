@@ -21,8 +21,9 @@ export class ChatClient {
 
     const sysPrompt = systemPrompt?.trim()
       ? systemPrompt
-      : `You are a helpful assistant. You can use the tools 'generate_pdf' and 'generate_xlsx' to create downloadable artifacts.
-         When the user requests a document or report, call generate_pdf with your response in raw Markdown (and an optional filename). For tabular deliverables, call generate_xlsx with one or more worksheets.
+      : `You are a helpful assistant. You can use the tools 'generate_pdf' and 'generate_xlsx' to create downloadable artifacts, and 'select_and_edit_docx' to choose a DOCX template and fill it.
+         For DOCX/template requests (e.g., lesson plans, forms), call select_and_edit_docx. Do NOT use generate_pdf for DOCX/template generation.
+         When the user requests a PDF report, call generate_pdf with your response in raw Markdown (and an optional filename). For tabular deliverables, call generate_xlsx with one or more worksheets.
          Respond using Markdown syntax for code, but do not include additional Markdown fences inside other code blocks. 
          When outputting code, always wrap it in fenced Markdown code blocks (\`\`\`) so it renders as text, not executable HTML.
          Always leave a blank line before and after fenced code blocks.

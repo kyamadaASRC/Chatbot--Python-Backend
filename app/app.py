@@ -8,6 +8,8 @@ import json
 import re
 import tempfile
 import time
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from flask import Flask, request, jsonify, send_file, render_template
@@ -27,7 +29,7 @@ GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unles
 Tool hand-offs:
 - When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
 - To return documents, call generate_pdf(markdown_text=...) or generate_xlsx(...).
-- Use select_and_edit_docx to pick a template from the manifest store and optionally apply edits.
+- For DOCX/template work (e.g., lesson plans, forms), call select_and_edit_docx to pick a template from the manifest store and apply edits. Do NOT use generate_pdf for DOCX/template requests.
 - Use web_search_preview or code_interpreter when they materially improve the answer.
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
@@ -417,6 +419,8 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
             if result_vs and not active_vector_store:
                 active_vector_store = result_vs
             output_file_ids = result.get("file_ids") or []
+            container_file_ids = result.get("container_file_ids") or []
+            filled_name = result.get("filled_filename") or "edited.docx"
             if output_file_ids:
                 effective_vs = result_vs or target_vs
                 if effective_vs:
@@ -440,6 +444,20 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
                             rec["container_id"] = container_id or cid
                             rec["container_file_id"] = fid
                         generated.append(rec)
+            elif container_file_ids:
+                # Create container-only entries so the UI can download even without OpenAI file ids.
+                cid_result = result.get("container_id") or container_id
+                for cfid in container_file_ids:
+                    rec = {
+                        "id": cfid,
+                        "openai_file_id": None,
+                        "container_id": cid_result,
+                        "container_file_id": cfid,
+                        "name": filled_name,
+                        "source": "generated",
+                        "vector_store_id": result_vs or target_vs,
+                    }
+                    generated.append(rec)
             # Attach locally cached files from base64 outputs, if present
             local_files = result.get("local_files") or []
             for lf in local_files:
@@ -744,8 +762,9 @@ def create_app() -> Flask:
     @app.route("/v1/containers/<container_id>/files/<file_id>/content", methods=["GET"])
     def get_container_file_content(container_id, file_id):
         try:
-            content = client.containers.files.content(container_id=container_id, file_id=file_id) # type: ignore
-            data = content.read() if hasattr(content, "read") else content
+            # New SDK exposes content as a sub-client; use retrieve to get bytes.
+            resp = client.containers.files.content.retrieve(container_id=container_id, file_id=file_id)  # type: ignore
+            data = resp.read() if hasattr(resp, "read") else bytes(resp)
             if isinstance(data, str):
                 data = data.encode("utf-8")
             download_name = request.args.get("name") or f"{file_id}.bin"
@@ -755,6 +774,10 @@ def create_app() -> Flask:
                 mimetype="application/octet-stream",
             )
         except Exception as exc:
+            try:
+                print(f"[container-download-error] {exc}")
+            except Exception:
+                pass
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/local_files/<path:fname>", methods=["GET"])
