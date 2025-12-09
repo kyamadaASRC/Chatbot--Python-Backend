@@ -237,6 +237,73 @@ def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, A
     }
 
 
+_PREVIEW_CACHE_DIR = Path("artifacts/previews")
+_PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _convert_docx_to_pdf_bytes(docx_bytes: bytes) -> Optional[bytes]:
+    """Convert DOCX bytes to PDF bytes using docx2pdf. Returns None on failure."""
+    try:
+        try:
+            import docx2pdf  # type: ignore
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "docx2pdf"])
+            import docx2pdf  # type: ignore
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            src = tmpdir_path / "input.docx"
+            out = tmpdir_path / "output.pdf"
+            src.write_bytes(docx_bytes)
+            try:
+                docx2pdf.convert(str(src), str(out))  # type: ignore
+            except Exception as e:
+                print(f"[preview-convert-error] docx2pdf failed: {e}")
+            if out.exists():
+                return out.read_bytes()
+        # Fallback: use libreoffice if docx2pdf failed
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmpdir_path = Path(tmpdir)
+                src = tmpdir_path / "input.docx"
+                out_dir = tmpdir_path / "out"
+                src.write_bytes(docx_bytes)
+                out_dir.mkdir(exist_ok=True)
+                subprocess.check_call(
+                    ["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(out_dir), str(src)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                out_pdf = out_dir / "input.pdf"
+                if out_pdf.exists():
+                    return out_pdf.read_bytes()
+        except Exception as e:
+            print(f"[preview-convert-error] libreoffice failed: {e}")
+    except Exception as exc:
+        print(f"[preview-convert-error] {exc}")
+    return None
+
+
+def _convert_docx_to_html(docx_bytes: bytes) -> Optional[str]:
+    """Convert DOCX bytes to HTML using mammoth. Returns HTML string or None."""
+    try:
+        try:
+            import mammoth  # type: ignore
+        except ImportError:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "mammoth"])
+            import mammoth  # type: ignore
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            src = tmpdir_path / "input.docx"
+            src.write_bytes(docx_bytes)
+            with open(src, "rb") as docx_file:
+                result = mammoth.convert_to_html(docx_file)  # type: ignore
+                html = result.value  # type: ignore
+                return html
+    except Exception as exc:
+        print(f"[preview-html-error] {exc}")
+    return None
+
+
 def _sanitize_filename(name: Optional[str], suffix: str) -> str:
     """Ensure we return filesystem-safe filenames with the proper suffix."""
     base = (name or "").strip() or f"assistant_output{suffix}"
@@ -427,6 +494,10 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
                     linked = _link_files_to_vector_store(output_file_ids, effective_vs)
                     # annotate with container ids if we have them
                     for rec in linked:
+                        if filled_name:
+                            rec["name"] = filled_name
+                        if rec.get("mime") is None:
+                            rec["mime"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         cid = container_file_map.get(rec["openai_file_id"])
                         if not cid:
                             cid = container_id
@@ -437,6 +508,10 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
                 else:
                     for fid in output_file_ids:
                         rec = _fetch_file_metadata(fid)
+                        if filled_name:
+                            rec["name"] = filled_name
+                        if rec.get("mime") is None:
+                            rec["mime"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         cid = container_file_map.get(fid)
                         if not cid:
                             cid = container_id
@@ -448,12 +523,18 @@ def _process_server_tool_calls(data: Dict[str, Any], vector_store_id: Optional[s
                 # Create container-only entries so the UI can download even without OpenAI file ids.
                 cid_result = result.get("container_id") or container_id
                 for cfid in container_file_ids:
+                    preview_url = None
+                    if cid_result and cfid:
+                        preview_url = f"/v1/containers/{cid_result}/files/{cfid}/preview.pdf?name={filled_name}"
                     rec = {
                         "id": cfid,
                         "openai_file_id": None,
                         "container_id": cid_result,
                         "container_file_id": cfid,
+                        "container_file_ids": container_file_ids,
                         "name": filled_name,
+                        "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "preview_url": preview_url,
                         "source": "generated",
                         "vector_store_id": result_vs or target_vs,
                     }
@@ -778,6 +859,42 @@ def create_app() -> Flask:
                 print(f"[container-download-error] {exc}")
             except Exception:
                 pass
+            return jsonify({"error": str(exc)}), 500
+
+    @app.route("/v1/containers/<container_id>/files/<file_id>/preview.pdf", methods=["GET"])
+    def get_container_file_preview(container_id, file_id):
+        try:
+            resp = client.containers.files.content.retrieve(container_id=container_id, file_id=file_id)  # type: ignore
+            docx_bytes = resp.read() if hasattr(resp, "read") else bytes(resp)
+            # First attempt HTML preview via mammoth
+            html = _convert_docx_to_html(docx_bytes) if isinstance(docx_bytes, (bytes, bytearray)) else None
+            if html:
+                return html, 200, {"Content-Type": "text/html"}
+            # Fallback to cached PDF if available (legacy path)
+            cached = _PREVIEW_CACHE_DIR / f"{file_id}.pdf"
+            if cached.exists():
+                return send_file(
+                    cached.open("rb"),
+                    download_name="preview.pdf",
+                    mimetype="application/pdf",
+                )
+            # Final fallback to PDF conversion
+            pdf_bytes = _convert_docx_to_pdf_bytes(docx_bytes) if isinstance(docx_bytes, (bytes, bytearray)) else None
+            if pdf_bytes:
+                cached.write_bytes(pdf_bytes)
+                return send_file(
+                    io.BytesIO(pdf_bytes),  # type: ignore
+                    download_name="preview.pdf",
+                    mimetype="application/pdf",
+                )
+            download_url = f"/v1/containers/{container_id}/files/{file_id}/content?name={request.args.get('name') or 'download.docx'}"
+            html = f"""<html><body style="font-family:sans-serif;padding:16px;">
+                <p>Preview conversion failed. You can download the DOCX instead:</p>
+                <p><a href="{download_url}" target="_blank" rel="noopener">Download DOCX</a></p>
+                </body></html>"""
+            return html, 200, {"Content-Type": "text/html"}
+        except Exception as exc:
+            print(f"[container-preview-error] {exc}")
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/local_files/<path:fname>", methods=["GET"])
