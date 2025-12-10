@@ -223,12 +223,20 @@ export function renderFileList(files = []) {
     if (file.container_file_id) div.dataset.containerFileId = file.container_file_id;
     if (file.container_id) div.dataset.containerId = file.container_id;
     if (file.mime || file.mimetype) div.dataset.mime = file.mime || file.mimetype;
-    // Prefer container download URLs when available, then explicit preview_url; do NOT default to files API.
+    // Prefer container URLs; for DOCX set preview to PDF/HTML endpoint, keep download via container/content.
+    const isDocx = (file.mime || file.mimetype || "").toLowerCase().includes("word") || displayName.toLowerCase().endsWith(".docx");
     if (file.container_id && file.container_file_id) {
       const encodedName = encodeURIComponent(displayName);
-      div.dataset.previewUrl = `/v1/containers/${file.container_id}/files/${file.container_file_id}/content?name=${encodedName}`;
+      if (isDocx) {
+        div.dataset.previewUrl = `/v1/containers/${file.container_id}/files/${file.container_file_id}/preview.pdf?name=${encodedName}`;
+      } else {
+        div.dataset.previewUrl = `/v1/containers/${file.container_id}/files/${file.container_file_id}/content?name=${encodedName}`;
+      }
     } else if (file.preview_url || file.previewUrl) {
       div.dataset.previewUrl = file.preview_url || file.previewUrl;
+    }
+    if (file.download_url || file.downloadUrl) {
+      div.dataset.downloadUrl = file.download_url || file.downloadUrl;
     }
 
     div.innerHTML = `

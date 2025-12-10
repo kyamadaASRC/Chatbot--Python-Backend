@@ -65,19 +65,39 @@ export class FileManager {
     if (!Array.isArray(records) || !records.length) return;
     const current = getCurrentSessionFiles();
     const byId = new Map();
+    const nameToOpenAI = new Map();
+    const makeKey = (rec) => {
+      const fid = rec?.openai_file_id || rec?.id;
+      if (fid) return fid;
+      if (rec?.download_url) return rec.download_url;
+      if (rec?.container_file_id) return rec.container_file_id;
+      return "";
+    };
     current.forEach((rec) => {
-      const key = rec.openai_file_id || rec.id;
+      const key = makeKey(rec);
       if (key) byId.set(key, rec);
+      const nm = (rec?.name || "").toLowerCase();
+      if (nm && rec?.openai_file_id) {
+        nameToOpenAI.set(nm, rec.openai_file_id);
+      }
     });
     let changed = false;
     for (const record of records) {
       const normalized = normalizeFileRecord(record, { source: record?.source || "generated" });
       if (!normalized) continue;
-      const key = normalized.openai_file_id || normalized.id;
+      const key = makeKey(normalized);
       if (!key) continue;
+      // If we already have an uploaded OpenAI copy for the same name, skip container-only duplicates.
+      const nm = (normalized.name || "").toLowerCase();
+      if (!normalized.openai_file_id && nm && nameToOpenAI.has(nm)) {
+        continue;
+      }
       const existing = byId.get(key);
       byId.set(key, existing ? { ...existing, ...normalized } : normalized);
       changed = true;
+      if (nm && normalized.openai_file_id) {
+        nameToOpenAI.set(nm, normalized.openai_file_id);
+      }
     }
     if (!changed) return;
     const updated = Array.from(byId.values());
@@ -188,15 +208,37 @@ function normalizeFileRecord(record = {}, defaults = {}) {
   const data = { ...defaults, ...record };
   const id = data.openai_file_id || data.id;
   if (!id) return null;
+  const containerId = data.container_id || (data.container && data.container.id) || null;
+  const containerFileId =
+    data.container_file_id ||
+    (Array.isArray(data.container_file_ids) ? data.container_file_ids[0] : null) ||
+    null;
+  const name = data.name || data.filename || id;
+  const mime = data.mime || data.mimetype || "";
+  let previewUrl = data.preview_url || data.previewUrl || null;
+  const downloadUrl = data.download_url || data.downloadUrl || null;
+  if (!previewUrl && containerId && containerFileId) {
+    const isDocx = mime.toLowerCase().includes("word") || name.toLowerCase().endsWith(".docx");
+    const encodedName = encodeURIComponent(name);
+    previewUrl = isDocx
+      ? `/v1/containers/${containerId}/files/${containerFileId}/preview.pdf?name=${encodedName}`
+      : `/v1/containers/${containerId}/files/${containerFileId}/content?name=${encodedName}`;
+  }
+  // Normalize any stale preview.html links to the current preview.pdf endpoint for DOCX.
+  if (previewUrl && previewUrl.includes("/preview.html")) {
+    previewUrl = previewUrl.replace("/preview.html", "/preview.pdf");
+  }
   return {
     id,
     openai_file_id: id,
-    name: data.name || data.filename || id,
+    name,
     size: data.size ?? data.bytes ?? null,
     vector_store_id: data.vector_store_id || null,
-    container_file_id: data.container_file_id || null,
-    preview_url: data.preview_url || null,
-    mime: data.mime || data.mimetype || "",
+    container_id: containerId,
+    container_file_id: containerFileId,
+    preview_url: previewUrl,
+    download_url: downloadUrl,
+    mime,
     source: data.source || "upload",
     created_at: data.created_at || null,
   };
@@ -517,6 +559,7 @@ uploadedFileList?.addEventListener("click", async (e) => {
     const previewUrl = item.dataset.previewUrl;
     const name = item.dataset.name || fileRecord?.name || fileId;
     const containerFileIdAttr = item.dataset.containerFileId || fileRecord?.container_file_id;
+    const downloadUrl = item.dataset.downloadUrl || fileRecord?.download_url;
     // Prefer local/preview URLs first (only if not pointing to OpenAI files API)
     if (previewUrl && (previewUrl.startsWith("/local_files") || previewUrl.startsWith("blob:") || previewUrl.startsWith("data:"))) {
       try {
@@ -537,6 +580,26 @@ uploadedFileList?.addEventListener("click", async (e) => {
       }
       return;
     }
+    if (downloadUrl) {
+      try {
+        const res = await fetch(downloadUrl);
+        if (!res.ok) throw new Error(`Download failed (${res.status})`);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      } catch (err) {
+        console.warn("Download failed:", err);
+        showToast("⚠️ Download failed", "error", 2500);
+      }
+    }
+
     if (containerId && containerFileIdAttr) {
       try {
         const res = await fetch(apiUrl(`/v1/containers/${containerId}/files/${containerFileIdAttr}/content?name=${encodeURIComponent(name)}`));
@@ -607,17 +670,27 @@ uploadedFileList?.addEventListener("click", async (e) => {
   // Filename click → preview
   if (e.target.classList.contains("file-name")) {
     const name = item.dataset.name || e.target.textContent || 'File Preview';
-    if (item.dataset.previewUrl) {
-      // Use local blob URL when available (client-only preview)
+    let previewUrl = item.dataset.previewUrl;
+    if (previewUrl && previewUrl.includes("/preview.html")) {
+      previewUrl = previewUrl.replace("/preview.html", "/preview.pdf");
+    }
+    if (previewUrl) {
       const mime = (item.dataset.mime || '').toLowerCase();
-      if (mime.includes('pdf')) return showPreviewIframe(name, item.dataset.previewUrl, 'application/pdf');
-      if (mime.startsWith('image/')) return showPreviewImage(name, item.dataset.previewUrl);
+      const containerId = item.dataset.containerId;
+      const containerFileId = item.dataset.containerFileId;
+      const downloadUrl = item.dataset.downloadUrl
+        || (containerId && containerFileId
+          ? `/v1/containers/${containerId}/files/${containerFileId}/content?name=${encodeURIComponent(name)}`
+          : previewUrl);
+      const lowerUrl = (previewUrl || "").toLowerCase();
+      const isDocx = name.toLowerCase().endsWith(".docx") || (mime.includes("word"));
+      if (mime.includes('pdf') || lowerUrl.endsWith('.pdf')) return showPreviewIframeWithDownload(name, previewUrl, 'application/pdf', downloadUrl);
+      if (isDocx && lowerUrl.includes('/preview.pdf')) return showPreviewIframeWithDownload(name, previewUrl, 'application/pdf', downloadUrl);
+      if (mime.startsWith('image/')) return showPreviewImage(name, previewUrl);
       if (mime.startsWith('text/')) {
-        // Fetch text from blob URL
-        try { const resp = await fetch(item.dataset.previewUrl); const txt = await resp.text(); return showPreviewText(name, txt); } catch { return showPreviewDownload(name, item.dataset.previewUrl); }
+        try { const resp = await fetch(previewUrl); const txt = await resp.text(); return showPreviewText(name, txt); } catch { return showPreviewDownload(name, downloadUrl); }
       }
-      // Fallback: offer download
-      return showPreviewDownload(name, item.dataset.previewUrl);
+      return showPreviewDownload(name, downloadUrl);
     }
     // If no local preview, show message (or add server proxy later)
     return showPreviewMessage(name, 'Preview not available for this file.');
@@ -746,6 +819,28 @@ function showPreviewIframe(title, url, type){
   iframe.src = url; iframe.style.width='100%'; iframe.style.height='100%'; iframe.style.border='0';
   iframe.type = type || 'application/pdf';
   body.appendChild(iframe);
+}
+
+function showPreviewIframeWithDownload(title, url, type, downloadUrl){
+  const body = openModal(title); if(!body) return;
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.flexDirection = 'column';
+  wrapper.style.height = '100%';
+  const iframe = document.createElement('iframe');
+  iframe.src = url; iframe.style.width='100%'; iframe.style.height='100%'; iframe.style.border='0';
+  iframe.type = type || 'application/pdf';
+  wrapper.appendChild(iframe);
+  if (downloadUrl) {
+    const dl = document.createElement('a');
+    dl.href = downloadUrl;
+    dl.download = '';
+    dl.textContent = 'Download';
+    dl.className = 'download-link';
+    dl.style.margin = '8px 0';
+    wrapper.appendChild(dl);
+  }
+  body.appendChild(wrapper);
 }
 
 function showPreviewImage(title, url){

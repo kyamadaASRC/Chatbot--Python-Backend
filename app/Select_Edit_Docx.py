@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import io
+import re
 from typing import Dict, List, Optional, Any
 
+from docx import Document  # type: ignore
 from app.openai_client import client
 from Template_Manager.template_manifest import load_manifest, ensure_manifest_vector_store
 
@@ -90,9 +93,100 @@ def _extract_container_file_ids_from_annotations(obj: Any) -> List[str]:
     return ids
 
 
+def _has_placeholder_noise(docx_bytes: bytes) -> bool:
+    """
+    Heuristic check: if the DOCX still contains obvious placeholder/gibberish (lorem ipsum, placeholder, asdf),
+    treat it as incomplete so we can ask the user for real content.
+    """
+    try:
+        doc = Document(io.BytesIO(docx_bytes))
+    except Exception:
+        return False
+    texts: List[str] = []
+    for p in doc.paragraphs:
+        if p.text:
+            texts.append(p.text)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text:
+                    texts.append(cell.text)
+    if not texts:
+        return False
+    lower = "\n".join(texts).lower()
+    patterns = [
+        r"\blorem\b",
+        r"\bipsum\b",
+        r"\bplaceholder\b",
+        r"\basdf\b",
+        r"\bxxx+\b",
+        r"\bzzzz+\b",
+    ]
+    hits = sum(1 for pat in patterns if re.search(pat, lower))
+    return hits >= 2
+
+
+def _find_header_issues(docx_bytes: bytes) -> List[str]:
+    """Detect if header anchors like Teacher/Date/Class/Subject are still blank or placeholder-like."""
+    issues: List[str] = []
+    try:
+        doc = Document(io.BytesIO(docx_bytes))
+    except Exception:
+        return issues
+    texts: List[str] = []
+    for p in doc.paragraphs:
+        if p.text:
+            texts.append(p.text)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text:
+                    texts.append(cell.text)
+    if not texts:
+        return issues
+    for txt in texts:
+        lower = txt.lower().strip()
+        # Teacher field blank or placeholder
+        if re.match(r"^teacher\s*:?\s*$", lower) or "teacher:" in lower and ("[name" in lower or lower.endswith(":")):
+            issues.append("teacher name")
+        # Date field blank or placeholder
+        if re.match(r"^date\s*:?\s*$", lower) or "date:" in lower and ("[mm" in lower or lower.endswith(":")):
+            issues.append("date")
+        # Class/Subject blank or placeholder
+        if ("class" in lower or "subject" in lower) and ("[" in lower or lower.endswith(":")):
+            issues.append("class/subject")
+    # De-dupe
+    return sorted(set(issues))
+
+
+def _load_docx_bytes(file_ids: List[str], container_id: Optional[str], container_file_ids: List[str]) -> Optional[bytes]:
+    """Load DOCX bytes from either OpenAI file_ids or container file ids."""
+    # Prefer OpenAI file ids if present
+    for fid in file_ids or []:
+        try:
+            content = client.files.content(fid)
+            data = content.read() if hasattr(content, "read") else content
+            if isinstance(data, (bytes, bytearray)):
+                return data
+        except Exception as exc:
+            print(f"[docx-load] failed to fetch file {fid}: {exc}")
+    # Fallback to container
+    if container_id and container_file_ids:
+        cfid = container_file_ids[0]
+        try:
+            resp = client.containers.files.content.retrieve(container_id=container_id, file_id=cfid)  # type: ignore
+            data = resp.read() if hasattr(resp, "read") else resp
+            if isinstance(data, (bytes, bytearray)):
+                return data
+        except Exception as exc:
+            print(f"[docx-load] failed to fetch container file {cfid}: {exc}")
+    return None
+
+
 def select_docx_template(prompt: str, vector_store_id: Optional[str] = None) -> Dict[str, any]:
     """Match the best DOCX template using the manifest vector store metadata."""
-    manifest_vs_id = ensure_manifest_vector_store(vector_store_id)
+    # Always use the manifest vector store from the Template Manager (ignore session VS overrides).
+    manifest_vs_id = ensure_manifest_vector_store(None)
     if not manifest_vs_id:
         print("[select_docx_template] No manifest VS ID available.")
         return {
@@ -194,22 +288,38 @@ def select_docx_template(prompt: str, vector_store_id: Optional[str] = None) -> 
     if not best_file_id:
         best_file_id = "UNKNOWN"
     template_name = None
+    template_info = None
     if best_file_id and best_file_id != "UNKNOWN":
         for t in manifest:
             if t.get("file_id") == best_file_id:
                 template_name = t.get("file_name") or t.get("name")
+                template_info = t.get("file_info") or t.get("description")
                 break
+    selection_text_parts: List[str] = []
+    if template_name:
+        selection_text_parts.append(f"Template name: {template_name}")
+    if best_file_id:
+        selection_text_parts.append(f"file_id: {best_file_id}")
+    if template_info:
+        selection_text_parts.append(f"file_info: {template_info}")
 
     return {
         "message": "No matching template was found in the manifest." if best_file_id == "UNKNOWN" else f"File {best_file_id} is the best template that matches this prompt: '{prompt}'",
         "file_id": best_file_id,
         "vector_store_id": template_vs_id,
         "template_name": template_name,
+        "file_info": template_info,
+        "selection_text": "\n".join(selection_text_parts) if selection_text_parts else None,
         "response": response_dict,
     }
 
 
-def edit_docx_template(file_id: str, edit_instructions: str, selection_text: Optional[str] = None) -> Dict[str, Any]:
+def edit_docx_template(
+    file_id: str,
+    edit_instructions: str,
+    selection_text: Optional[str] = None,
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
     """
     Load the DOCX file via code interpreter and apply the requested edits.
     Returns output file IDs (if any) plus a short status message.
@@ -222,22 +332,35 @@ def edit_docx_template(file_id: str, edit_instructions: str, selection_text: Opt
         preview = (edit_instructions or "")[:200]
         print(f"[edit_docx_template] edit_instructions preview:\n{preview}")
     selection_block = f"\nTemplate selection:\n{selection_text}\n" if selection_text else ""
+    history_block = ""
+    if conversation_history:
+        snippets: List[str] = []
+        for msg in conversation_history[-6:]:
+            role = msg.get("role")
+            content = (msg.get("content") or "").strip()
+            if not role or not content:
+                continue
+            snippets.append(f"{role}: {content[:400]}")
+        if snippets:
+            history_block = "\nRecent conversation (most recent last):\n" + "\n".join(snippets) + "\n"
     response = client.responses.create(
         model="gpt-5.1",
         input=[
             {
-                "role": "user",
-                "content": (
-                    "Load the DOCX template and apply these instructions. "
-                    "If required details are missing, PAUSE and ask the user clarifying questions before proceeding. "
-                    "After applying the edits: save the result as edited.docx in the working directory, then attach edited.docx as an output file so output_file_ids is populated. "
-                    "List the working directory before finishing to verify edited.docx exists. "
-                    f"{selection_block}"
-                    "[[Modification Instruction Start]]\n"
-                    f"{edit_instructions}\n"
-                    "Fill this template as requested and return the edited DOCX file.\n"
-                    "[[Modification Instruction End]]\n"
-                    "Your final output should be the modified file (as an attached output file, not just text)."
+        "role": "user",
+        "content": (
+            "Load the existing DOCX template (do NOT rebuild from scratch) and apply these instructions in-place. "
+            "Do NOT duplicate paragraphs or bullet items; keep one final version per section. "
+            "If the template text is placeholder/lorem ipsum or nonsense and required values are not present in the instructions, STOP and return the status that required values are missing; do not invent content, do not ask questions, and do not reuse placeholder text."
+            "After applying the edits: save the result as edited.docx in the working directory, then attach edited.docx as an output file so output_file_ids is populated. "
+            "List the working directory before finishing to verify edited.docx exists. "
+            f"{history_block}"
+            f"{selection_block}"
+            "[[Modification Instruction Start]]\n"
+            f"{edit_instructions}\n"
+            "Fill this template as requested and return the edited DOCX file.\n"
+            "[[Modification Instruction End]]\n"
+            "Your final output should be the modified file (as an attached output file, not just text)."
                 ),
             }
         ],
@@ -258,6 +381,38 @@ def edit_docx_template(file_id: str, edit_instructions: str, selection_text: Opt
         output_text = " ".join(getattr(response, "output_text"))
     elif isinstance(getattr(response, "output_text", None), str):
         output_text = getattr(response, "output_text")
+    # Heuristic checks: placeholder noise or missing header anchors; if found, ask for details and skip returning files.
+    doc_bytes = _load_docx_bytes(file_ids or [], container_id, container_file_ids or [])
+    if doc_bytes:
+        try:
+            if _has_placeholder_noise(doc_bytes):
+                message = output_text.strip() or (
+                    "The DOCX still contains placeholder/lorem ipsum; edit_docx expects final values in the instructions. "
+                    "Provide the missing values and re-run edit_docx via the main model when ready."
+                )
+                return {
+                    "message": message,
+                    "file_ids": [],
+                    "container_id": container_id,
+                    "container_file_ids": [],
+                    "response": response_dict,
+                }
+            header_issues = _find_header_issues(doc_bytes)
+            if header_issues:
+                missing_list = ", ".join(sorted(set(header_issues)))
+                message = output_text.strip() or (
+                    f"Missing required header values ({missing_list}); edit_docx will not fabricate these. "
+                    "Provide them via the main model and re-run edit_docx when complete."
+                )
+                return {
+                    "message": message,
+                    "file_ids": [],
+                    "container_id": container_id,
+                    "container_file_ids": [],
+                    "response": response_dict,
+                }
+        except Exception as exc:
+            print(f"[post-check] failed to inspect docx: {exc}")
     message = output_text.strip() or f"Edited DOCX for file {file_id}."
 
     return {
@@ -266,67 +421,4 @@ def edit_docx_template(file_id: str, edit_instructions: str, selection_text: Opt
         "container_id": container_id,
         "container_file_ids": container_file_ids,
         "response": response_dict,
-    }
-
-
-def select_and_edit_docx(
-    prompt: str,
-    edit_instructions: Optional[str] = None,
-    file_id: Optional[str] = None,
-    vector_store_id: Optional[str] = None,
-) -> Dict[str, any]:
-    """
-    Convenience wrapper: pick the best template (via manifest vector store),
-    then optionally run edits against it.
-    """
-    messages: List[str] = []
-    selected_file_id = file_id or None
-    selection: Optional[Dict[str, any]] = None
-    template_vs_id = None
-    template_name = None
-    if not selected_file_id:
-        selection = select_docx_template(prompt, vector_store_id=vector_store_id)
-        selected_file_id = selection.get("file_id")
-        template_vs_id = selection.get("vector_store_id")
-        template_name = selection.get("template_name")
-
-    edit_result: Optional[Dict[str, any]] = None
-    if not selected_file_id or selected_file_id == "UNKNOWN":
-        if selection and selection.get("message"):
-            messages.append(selection.get("message"))
-    else:
-        selection_msg = (selection or {}).get("message")
-        parts: List[str] = []
-        if edit_instructions:
-            parts.append(str(edit_instructions))
-        edit_text = "\n\n".join(parts).strip() or prompt
-        print(f"[select_and_edit_docx] editing file_id={selected_file_id}, template_vs={template_vs_id}, selection_msg_present={bool(selection_msg)}, instructions_len={len(edit_text or '')}")
-        if selection_msg:
-            print(f"[select_and_edit_docx] selection_msg:\n{selection_msg}")
-        if edit_text:
-            preview = edit_text[:400]
-            print(f"[select_and_edit_docx] edit_text (first 400 chars):\n{preview}")
-        edit_result = edit_docx_template(selected_file_id, edit_text, selection_text=selection_msg)
-        if edit_result.get("message"):
-            messages.append(edit_result["message"])
-
-    filled_name = None
-    if template_name:
-        base = template_name
-        if base.lower().endswith(".docx"):
-            base = base[:-5]
-        filled_name = f"{base} [FILLED].docx"
-
-    return {
-        "message": "\n\n".join(messages) if messages else "Selection completed.",
-        "file_id": selected_file_id,
-        "file_ids": (edit_result or {}).get("file_ids") if edit_result else [],
-        "container_id": (edit_result or {}).get("container_id"),
-        "container_file_ids": (edit_result or {}).get("container_file_ids"),
-        "filled_filename": filled_name or "edited.docx",
-        # Keep session vector store for linking; also expose which store contained the template.
-        "vector_store_id": vector_store_id,
-        "template_vector_store_id": template_vs_id,
-        "selection": selection,
-        "edit_result": edit_result,
     }

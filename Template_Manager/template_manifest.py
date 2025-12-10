@@ -45,27 +45,31 @@ def ensure_template_vector_store(vector_store_id: str | None = None) -> str:
     return vs_id
 
 
+def _create_manifest_vector_store() -> str:
+    """Create a manifest vector store and cache its id."""
+    vs = client.vector_stores.create(name="template-manifest-store")
+    vs_id = _extract_id(vs) or ""
+    if vs_id:
+        MANIFEST_VECTOR_STORE_PATH.write_text(vs_id, encoding="utf-8")
+    return vs_id
+
+
 def ensure_manifest_vector_store(vector_store_id: str | None = None) -> str:
     """Separate vector store dedicated to manifest JSON for faster searching.
 
-    Expected behavior: the manifest vector store id is created once and stored in
-    manifest_vector_store_id.txt. If that file is missing, raise so the user can
-    populate it manually instead of silently creating a new store.
+    If no id is provided or the file contains a placeholder, create one automatically.
     """
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is missing; cannot access manifest vector store.")
-    cached = vector_store_id or (MANIFEST_VECTOR_STORE_PATH.read_text().strip() if MANIFEST_VECTOR_STORE_PATH.exists() else "")
-    if cached:
-        if cached.startswith("REPLACE_WITH") or len(cached) < 5:
-            raise RuntimeError(
-                f"Manifest vector store id placeholder detected in {MANIFEST_VECTOR_STORE_PATH}. "
-                "Please write the real manifest vector store id to this file."
-            )
+    # Prefer the on-disk manifest id; only fall back to provided override when explicitly set.
+    cached = (MANIFEST_VECTOR_STORE_PATH.read_text().strip() if MANIFEST_VECTOR_STORE_PATH.exists() else "") or vector_store_id or ""
+    if cached and not cached.startswith("REPLACE_WITH") and len(cached) >= 5:
         return cached
-    raise RuntimeError(
-        "Manifest vector store id not found. Please create one manually and write it to "
-        f"{MANIFEST_VECTOR_STORE_PATH}."
-    )
+    # Auto-create when missing or placeholder to avoid hard failures.
+    vs_id = _create_manifest_vector_store()
+    if not vs_id:
+        raise RuntimeError("Failed to create manifest vector store.")
+    return vs_id
 
 
 def _attach_file(vector_store_id: str, file_id: str) -> None:
@@ -171,7 +175,7 @@ def load_manifest(vector_store_id: str | None = None) -> Tuple[List[Dict[str, An
 
 
 def _generate_file_info(file_id: str, file_name: str) -> str:
-    """Ask the model (with code interpreter) to summarize the template."""
+    """Ask the model (with code interpreter) to summarize the template for selection/anchors."""
     try:
         resp = client.responses.create(
             model="gpt-5.1",
@@ -179,9 +183,14 @@ def _generate_file_info(file_id: str, file_name: str) -> str:
                 {
                     "role": "user",
                     "content": (
-                        "Inspect the attached file and generate a structured file_info description "
-                        "similar to the sample in template_file_structure.txt. Include: brief document description, "
-                        "main sections, fillable/logical fields, and any placeholders. Return plain Markdown text only."
+                        "Inspect the attached DOCX and generate a structured file_info description similar to the sample "
+                        "in template_file_structure.txt.\n\n"
+                        "Priorities:\n"
+                        "- Provide a concise description and the main sections.\n"
+                        "- List any fillable/logical fields or placeholders.\n"
+                        "- Add a short 'Selection Keywords' line with 5-12 keywords/phrases that help choose this template.\n"
+                        "- Keep content compact and deterministic so it can be reused as anchor hints during editing.\n"
+                        "Return plain Markdown text only."
                     ),
                 }
             ],

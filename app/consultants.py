@@ -90,35 +90,56 @@ DOC_TOOL_SPECS = [
     },
 ]
 
-# Tool for selecting/editing DOCX templates via vector search + code interpreter.
-DOC_TOOL_SPECS.append(
-    {
-        "type": "function",
-        "name": "select_and_edit_docx",
-        "description": "Pick the best-matching DOCX template from the library and optionally apply edits using code interpreter.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "prompt": {
-                    "type": "string",
-                    "description": "User request that describes the needed template.",
+# Tools for selecting and editing DOCX templates via vector search + code interpreter.
+DOC_TOOL_SPECS.extend(
+    [
+        {
+            "type": "function",
+            "name": "select_docx",
+            "description": "Pick the best-matching DOCX template from the library manifest (file_info carries keywords/summary for matching). If you call select_docx, you MUST follow with edit_docx in the same turn using the returned file_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "User request that describes the needed template.",
+                    },
+                    "vector_store_id": {
+                        "type": "string",
+                        "description": "Optional vector store to scope template search and attach files.",
+                    },
                 },
-                "edit_instructions": {
-                    "type": "string",
-                    "description": "Optional instructions to apply to the selected template.",
-                },
-                "file_id": {
-                    "type": "string",
-                    "description": "Optional file_id to edit directly (skips template selection).",
-                },
-                "vector_store_id": {
-                    "type": "string",
-                    "description": "Optional vector store to attach generated files to.",
-                },
+                "required": ["prompt"],
             },
-            "required": ["prompt"],
         },
-    }
+        {
+            "type": "function",
+            "name": "edit_docx",
+            "description": "Apply edits to a selected DOCX template using code interpreter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "file_id of the DOCX template to edit.",
+                    },
+                    "edit_instructions": {
+                        "type": "string",
+                        "description": "Instructions to apply to the selected template.",
+                    },
+                    "selection_text": {
+                        "type": "string",
+                        "description": "Optional selection summary/context from select_docx.",
+                    },
+                    "vector_store_id": {
+                        "type": "string",
+                        "description": "Optional vector store to attach generated files to.",
+                    },
+                },
+                "required": ["file_id", "edit_instructions"],
+            },
+        },
+    ]
 )
 
 

@@ -21,13 +21,13 @@ export class ChatClient {
 
     const sysPrompt = systemPrompt?.trim()
       ? systemPrompt
-      : `You are a helpful assistant. You can use the tools 'generate_pdf' and 'generate_xlsx' to create downloadable artifacts, and 'select_and_edit_docx' to choose a DOCX template and fill it.
-         For DOCX/template requests (e.g., lesson plans, forms), call select_and_edit_docx. Do NOT use generate_pdf for DOCX/template generation.
+      : `You are a helpful assistant. You can use the tools 'generate_pdf' and 'generate_xlsx' to create downloadable artifacts, and 'select_docx' + 'edit_docx' to work with DOCX templates.
+         For DOCX/template requests (e.g., lesson plans, forms), call select_docx to pick a template (file_info provides keywords/summary). IN THE SAME TURN, once you have the file_id, draft anchor points/sections/placeholders for the request and then call edit_docx with the file_id and those anchor-driven instructions. Do NOT end after selection; always follow with edit_docx. Do NOT use generate_pdf for DOCX/template generation.
          When the user requests a PDF report, call generate_pdf with your response in raw Markdown (and an optional filename). For tabular deliverables, call generate_xlsx with one or more worksheets.
          Respond using Markdown syntax for code, but do not include additional Markdown fences inside other code blocks. 
          When outputting code, always wrap it in fenced Markdown code blocks (\`\`\`) so it renders as text, not executable HTML.
          Always leave a blank line before and after fenced code blocks.
-         Otherwise, just reply normally in raw Markdown.`;
+         Otherwise, just reply normally in raw Markdown.` + (window.last_selected_docx_id ? ` You already have a selected template (file_id=${window.last_selected_docx_id}). Do NOT call select_docx again; call edit_docx with that file_id and the user's latest answers.` : "");
 
     // Build full conversation context: system + prior history + current user
     const historyMsgs = (history || [])
@@ -59,15 +59,8 @@ export class ChatClient {
       }
     }
 
-    // Ensure we have a container for code interpreter when needed
-    let containerId = window.current_container_id;
-    if (!containerId && this.sessionManager?.ensureContainer) {
-      try {
-        containerId = await this.sessionManager.ensureContainer();
-      } catch (e) {
-        console.warn("Could not create container on-demand:", e);
-      }
-    }
+    // Use existing container if already provisioned; do not auto-create unless explicitly requested elsewhere.
+    const containerId = window.current_container_id || null;
 
     const tools = [];
     if (vectorStoreId) {
@@ -125,31 +118,53 @@ export class ChatClient {
       },
     });
 
+    if (!window.last_selected_docx_id) {
+      tools.push({
+        type: "function",
+        name: "select_docx",
+        description: "Pick the best DOCX template from the library manifest.",
+        parameters: {
+          type: "object",
+          properties: {
+            prompt: {
+              type: "string",
+              description: "Description of the document/template that is needed.",
+            },
+            vector_store_id: {
+              type: "string",
+              description: "Optional vector store id to scope search and attach files.",
+            },
+          },
+          required: ["prompt"],
+        },
+      });
+    }
+
     tools.push({
       type: "function",
-      name: "select_and_edit_docx",
-      description: "Pick the best DOCX template from the library and optionally apply edits to it.",
+      name: "edit_docx",
+      description: "Apply edit instructions to a selected DOCX template.",
       parameters: {
         type: "object",
         properties: {
-          prompt: {
+          file_id: {
             type: "string",
-            description: "Description of the document/template that is needed.",
+            description: "The OpenAI file_id of the template to edit.",
           },
           edit_instructions: {
             type: "string",
-            description: "Optional instructions to apply to the chosen template.",
+            description: "Instructions to apply to the chosen template.",
           },
-          file_id: {
+          selection_text: {
             type: "string",
-            description: "Optional existing OpenAI file_id to edit directly (skips selection).",
+            description: "Optional selection summary/context from select_docx.",
           },
           vector_store_id: {
             type: "string",
             description: "Optional vector store id to attach generated files to.",
           },
         },
-        required: ["prompt"],
+        required: ["file_id", "edit_instructions"],
       },
     });
 
@@ -185,6 +200,7 @@ export class ChatClient {
         tools,
         history: historyMsgs,
         files: Array.isArray(session.files) ? session.files : [],
+        selected_file_id: window.last_selected_docx_id || null,
         // Pass along the previewed router recommendation so the backend avoids double work.
         router_decision: routerDecision || null,
       }),

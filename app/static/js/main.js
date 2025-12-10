@@ -637,6 +637,14 @@ scrollDownBtn?.addEventListener("click", () => {
     );
     dismissProgressToasts(routerPreview?.toasts || []);
     announceRouterCompletion(response, routerPreview);
+    // Surface backend progress log as toasts.
+    if (Array.isArray(response?.progress_log)) {
+      response.progress_log.forEach((p) => {
+        const stage = p?.stage || "";
+        if (!stage) return;
+        showToast(stage, "info", 1200);
+      });
+    }
 
     if (
       window.fileManager?.addGeneratedFiles &&
@@ -644,16 +652,31 @@ scrollDownBtn?.addEventListener("click", () => {
       response.generated_files.length
     ) {
       try {
+        console.log("GEN FILES", response.generated_files);
         window.fileManager.addGeneratedFiles(response.generated_files);
       } catch (err) {
         console.warn("Failed to record generated files:", err);
+      }
+    }
+    // Cache selected template file_id to avoid re-running select_docx on later turns.
+    if (Array.isArray(response?.selection_results) && response.selection_results.length) {
+      const fid = response.selection_results[0]?.file_id;
+      if (fid) {
+        window.last_selected_docx_id = fid;
       }
     }
 
     removeSpinner(spinner);
     const output = extractAssistantText(response) || "";
     const toolMd = extractMarkdownFromToolCall(response) || "";
-    const finalText = output && output.trim() ? output : (toolMd && toolMd.trim() ? toolMd : "Generated a PDF (see link below).");
+    const hasFiles = Array.isArray(response?.generated_files) && response.generated_files.length > 0;
+    const finalText = output && output.trim()
+      ? output
+      : (toolMd && toolMd.trim()
+        ? toolMd
+        : (hasFiles
+          ? "Generated a DOCX. Check the Files list to download."
+          : "I need a bit more detail to fill the template. Please provide the requested info." ));
     sessionManager.addMessageToCurrent("user", text);
     sessionManager.addMessageToCurrent("assistant", finalText);
     renderAssistantMessage(finalText);
