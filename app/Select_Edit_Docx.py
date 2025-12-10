@@ -184,7 +184,8 @@ def _load_docx_bytes(file_ids: List[str], container_id: Optional[str], container
 
 
 def select_docx_template(prompt: str, vector_store_id: Optional[str] = None) -> Dict[str, any]:
-    """Match the best DOCX template using the manifest vector store metadata."""
+    """Match the best DOCX template using the manifest vector store metadata.
+    Onboarding tip: manifest cache + manifest VS carry `file_info` anchors; the main chat model will read these anchors to ask the user for values before calling edit_docx."""
     # Always use the manifest vector store from the Template Manager (ignore session VS overrides).
     manifest_vs_id = ensure_manifest_vector_store(None)
     if not manifest_vs_id:
@@ -347,20 +348,21 @@ def edit_docx_template(
         model="gpt-5.1",
         input=[
             {
-        "role": "user",
-        "content": (
-            "Load the existing DOCX template (do NOT rebuild from scratch) and apply these instructions in-place. "
-            "Do NOT duplicate paragraphs or bullet items; keep one final version per section. "
-            "If the template text is placeholder/lorem ipsum or nonsense and required values are not present in the instructions, STOP and return the status that required values are missing; do not invent content, do not ask questions, and do not reuse placeholder text."
-            "After applying the edits: save the result as edited.docx in the working directory, then attach edited.docx as an output file so output_file_ids is populated. "
-            "List the working directory before finishing to verify edited.docx exists. "
-            f"{history_block}"
-            f"{selection_block}"
-            "[[Modification Instruction Start]]\n"
-            f"{edit_instructions}\n"
-            "Fill this template as requested and return the edited DOCX file.\n"
-            "[[Modification Instruction End]]\n"
-            "Your final output should be the modified file (as an attached output file, not just text)."
+                "role": "user",
+                "content": (
+                    # Instruction-only prompt: questioning happens in the main chat model, not here.
+                    "Load the existing DOCX template (do NOT rebuild from scratch) and apply these instructions in-place. "
+                    "Do NOT duplicate paragraphs or bullet items; keep one final version per section. "
+                    "If the template text is placeholder/lorem ipsum or nonsense and required values are not present in the instructions, STOP and return the status that required values are missing; do not invent content, do not ask questions, and do not reuse placeholder text."
+                    "After applying the edits: save the result as edited.docx in the working directory, then attach edited.docx as an output file so output_file_ids is populated. "
+                    "List the working directory before finishing to verify edited.docx exists. "
+                    f"{history_block}"
+                    f"{selection_block}"
+                    "[[Modification Instruction Start]]\n"
+                    f"{edit_instructions}\n"
+                    "Fill this template as requested and return the edited DOCX file.\n"
+                    "[[Modification Instruction End]]\n"
+                    "Your final output should be the modified file (as an attached output file, not just text)."
                 ),
             }
         ],

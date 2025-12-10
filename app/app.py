@@ -11,7 +11,7 @@ import time
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TypedDict, Tuple, Union
 from flask import Flask, request, jsonify, send_file, render_template
 from flask_cors import CORS
 from openpyxl import Workbook
@@ -24,11 +24,12 @@ from app.consultants import _extract_id
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "240"))
+DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
 Tool hand-offs:
 - When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
 - To return documents, call generate_pdf(markdown_text=...) or generate_xlsx(...).
-- For DOCX/template work (e.g., lesson plans, forms): if no template is selected yet, proactively call select_docx based on the user request (you don’t need the user to say “use select_docx”); file_info holds keywords/anchor points. YOU (the assistant) must ask the user the necessary questions to fill the template, based on those anchors. Do not call edit_docx until you have enough answers to populate the fields. Once ready, call edit_docx once with the file_id and complete edit instructions; do not ask questions from within edit_docx. Do NOT use generate_pdf for DOCX/template requests.
+- For DOCX/template work (e.g., lesson plans, forms): if no template is selected yet, proactively call select_docx based on the user request (you don’t need the user to say “use select_docx”); file_info/selection_text holds keywords/anchor points. YOU must ask the user for the anchor-aligned values (header, overview, objectives, materials, assessment, accommodations, etc.). Do not call edit_docx until you have those values; call edit_docx exactly once with complete edit instructions. Do NOT ask questions from within edit_docx. Do NOT use generate_pdf for DOCX/template requests. If you need to inspect the template or a generated DOCX, you may use code_interpreter with the relevant file_id/container_file_id to read headings/content and verify the fill before responding to the user.
 - Use web_search_preview or code_interpreter when they materially improve the answer.
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
@@ -142,6 +143,32 @@ DOC_TOOL_SPECS = [
     },
 ]
 _TOOL_LOGGED = False
+
+# Lightweight DTOs to keep tool payloads structured.
+class SelectionResult(TypedDict, total=False):
+    file_id: str
+    selection_text: str
+    template_name: str
+    vector_store_id: str
+    message: str
+    file_info: str
+    response: Dict[str, Any]
+
+
+class GeneratedFile(TypedDict, total=False):
+    id: str
+    openai_file_id: Optional[str]
+    container_id: Optional[str]
+    container_file_id: Optional[str]
+    container_file_ids: Optional[List[str]]
+    name: str
+    mime: Optional[str]
+    preview_url: Optional[str]
+    download_url: Optional[str]
+    source: str
+    vector_store_id: Optional[str]
+    created_at: Optional[int]
+    size: Optional[int]
 
 # Global Flask app instance for decorators below
 app = Flask(__name__)
@@ -342,6 +369,22 @@ def _sanitize_filename(name: Optional[str], suffix: str) -> str:
     return safe
 
 
+def _friendly_filled_name(template_name: Optional[str], file_id: Optional[str]) -> str:
+    """Derive a user-friendly filled filename from the template name."""
+    if template_name:
+        base = template_name[:-5] if template_name.lower().endswith(".docx") else template_name
+        return f"{base} [FILLED].docx"
+    if file_id:
+        return f"{file_id} [FILLED].docx"
+    return "edited.docx"
+
+
+def _debug(msg: str) -> None:
+    """Optional debug logger controlled via DEBUG_LOG env var."""
+    if DEBUG_LOG:
+        print(msg)
+
+
 def _make_temp_path(suffix: str) -> Path:
     """Create a temporary file path for DOCX/XLSX generation."""
     # Use NamedTemporaryFile so downstream libraries can write directly to disk.
@@ -482,7 +525,9 @@ def _process_server_tool_calls(
     selected_file_id: Optional[str] = None,
     progress_log: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """Look for server-side function calls (DOCX/XLSX/selection) and synthesize files."""
+    """Look for server-side function calls (DOCX/XLSX/selection) and synthesize files.
+    Onboarding tip: this is the single place where we execute assistant tool calls server-side,
+    enrich with vector store links, and carry selection context forward."""
     generated: List[Dict[str, Any]] = []
     messages: List[str] = []
     selection_results: List[Dict[str, Any]] = []
@@ -587,6 +632,67 @@ def _process_server_tool_calls(
         for lf in local_files:
             generated.append(lf)
 
+    # Helpers for per-tool handling to keep the main loop readable.
+    def _handle_select(args: Dict[str, Any]) -> Optional[SelectionResult]:
+        nonlocal active_vector_store, selected_file_id, last_selection, last_selection_prompt
+        _log_progress(progress_log, "tool:select_docx")
+        prompt = (args.get("prompt") or "").strip()
+        target_vs = args.get("vector_store_id") or active_vector_store
+        if not prompt:
+            messages.append("select_docx: missing prompt; skipping.")
+            return None
+        result = select_docx_template(prompt, vector_store_id=target_vs)
+        selection_results.append(result)  # type: ignore[arg-type]
+        if result.get("vector_store_id") and not active_vector_store:
+            active_vector_store = result["vector_store_id"]
+        last_selection = result or {}
+        if result.get("file_id"):
+            selected_file_id = result.get("file_id")
+        last_selection_prompt = prompt
+        return result  # type: ignore[return-value]
+
+    def _handle_edit(args: Dict[str, Any]) -> None:
+        nonlocal edit_executed, selected_file_id, active_vector_store
+        _log_progress(progress_log, "tool:edit_docx")
+        file_id = (
+            (args.get("file_id") or "").strip()
+            or (last_selection.get("file_id") or "").strip()
+            or (selected_file_id or "").strip()
+        )
+        edit_instructions = (args.get("edit_instructions") or args.get("instructions") or "").strip()
+        if not file_id:
+            messages.append("edit_docx: missing file_id; skipping.")
+            return
+        if not edit_instructions:
+            messages.append("edit_docx: missing edit_instructions; skipping.")
+            return
+        selection_text_local = (args.get("selection_text") or "").strip() or last_selection.get("selection_text") or last_selection.get("message")
+        target_vs = args.get("vector_store_id") or active_vector_store
+        template_name = (
+            last_selection.get("template_name")
+            or args.get("template_name")
+            or None
+        )
+        if not template_name and selection_text_local:
+            # Try to extract template name from selection_text lines like "Template name: XYZ.docx"
+            for line in (selection_text_local or "").splitlines():
+                if "template name" in line.lower() and ":" in line:
+                    cand = line.split(":", 1)[1].strip()
+                    if cand:
+                        template_name = cand
+                        break
+        filled_name = _friendly_filled_name(template_name, file_id)
+        result = edit_docx_template(
+            file_id=file_id,
+            edit_instructions=edit_instructions,
+            selection_text=selection_text_local,
+            conversation_history=history_messages,
+        )
+        edit_executed = True
+        _append_edit_outputs(result, filled_name, target_vs)
+        if not ((result.get("file_ids") or result.get("container_file_ids") or result.get("local_files"))):
+            messages.append("edit_docx returned no files; please provide required values or retry the edit.")
+
     for entry in outputs:
         entry_type = entry.get("type")
         if entry_type not in ("function_call", "output_tool_call"):
@@ -599,71 +705,9 @@ def _process_server_tool_calls(
             _log_progress(progress_log, "tool:generate_xlsx")
             generated.extend(_handle_generate_xlsx_tool(args, active_vector_store))
         elif name == "select_docx":
-            _log_progress(progress_log, "tool:select_docx")
-            prompt = (args.get("prompt") or "").strip()
-            target_vs = args.get("vector_store_id") or active_vector_store
-            if not prompt:
-                messages.append("select_docx: missing prompt; skipping.")
-                continue
-            result = select_docx_template(prompt, vector_store_id=target_vs)
-            selection_results.append(result)
-            if result.get("vector_store_id") and not active_vector_store:
-                active_vector_store = result["vector_store_id"]
-            last_selection = result or {}
-            if result.get("file_id"):
-                selected_file_id = result.get("file_id")
-            last_selection_prompt = prompt
+            _handle_select(args)
         elif name == "edit_docx":
-            _log_progress(progress_log, "tool:edit_docx")
-            file_id = (
-                (args.get("file_id") or "").strip()
-                or (last_selection.get("file_id") or "").strip()
-                or (selected_file_id or "").strip()
-            )
-            edit_instructions = (args.get("edit_instructions") or args.get("instructions") or "").strip()
-            if not file_id:
-                messages.append("edit_docx: missing file_id; skipping.")
-                continue
-            if not edit_instructions:
-                messages.append("edit_docx: missing edit_instructions; skipping.")
-                continue
-            selection_text = (args.get("selection_text") or "").strip() or last_selection.get("selection_text") or last_selection.get("message")
-            target_vs = args.get("vector_store_id") or active_vector_store
-            # Build a filled filename based on the template name (if known) so the UI shows a friendly name.
-            filled_name = "edited.docx"
-            template_name = (
-                last_selection.get("template_name")
-                or args.get("template_name")
-                or None
-            )
-            if not template_name and selection_text:
-                # Try to extract from selection_text lines like "Template name: XYZ.docx"
-                for line in (selection_text or "").splitlines():
-                    if "template name" in line.lower() and ":" in line:
-                        cand = line.split(":", 1)[1].strip()
-                        if cand:
-                            template_name = cand
-                            break
-            if not template_name:
-                try:
-                    meta = client.files.retrieve(file_id)
-                    meta_dict = _ensure_dict(meta)
-                    template_name = meta_dict.get("filename") or meta_dict.get("display_name")
-                except Exception:
-                    template_name = None
-            if template_name:
-                base = template_name[:-5] if template_name.lower().endswith(".docx") else template_name
-                filled_name = f"{base} [FILLED].docx"
-            result = edit_docx_template(
-                file_id=file_id,
-                edit_instructions=edit_instructions,
-                selection_text=selection_text,
-                conversation_history=history_messages,
-            )
-            edit_executed = True
-            _append_edit_outputs(result, filled_name, target_vs)
-            if not ((result.get("file_ids") or result.get("container_file_ids") or result.get("local_files"))):
-                messages.append("edit_docx returned no files; please provide required values or retry the edit.")
+            _handle_edit(args)
     # If any generated entries match container_file_map, enrich them
     for rec in generated:
         fid = rec.get("openai_file_id") or rec.get("id")
@@ -902,6 +946,8 @@ def chat():
         if selection_results:
             last_sel = selection_results[-1] if isinstance(selection_results, list) else None
             if isinstance(last_sel, dict):
+                # Thread the last selection forward so the next turn has context without re-calling select_docx.
+                # Frontend should echo these back on the next /chat to keep the main model aware of the chosen template.
                 if not selected_file_id:
                     selected_file_id = last_sel.get("file_id") or selected_file_id
                 if not selection_text:

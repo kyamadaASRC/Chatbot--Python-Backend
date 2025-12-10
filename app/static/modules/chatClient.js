@@ -168,6 +168,10 @@ export class ChatClient {
       },
     });
 
+    // Onboarding tip: when a template is selected, thread `selected_file_id`/`selection_text`
+    // from the last response into the next /chat call so the model can ask anchor-aligned
+    // questions before invoking edit_docx.
+
     tools.push({ type: "web_search_preview" });
     const codeInterpreterTool = { type: "code_interpreter" };
     if (containerId) {
@@ -217,7 +221,8 @@ export class ChatClient {
 
     const data = await res.json();
   
-    console.log("OpenAI Response Data:", data);
+    // Debug log once; avoid duplicate console spam.
+    console.log("Chat model response:", data);
     showToast("Response received", "success", 1200);
 
     // Extract assistant text robustly from the response
@@ -243,11 +248,6 @@ export class ChatClient {
 
     const assistantMsg = extractAssistantTextFromResponse(data) || data.text || "";
     data._assistant_message = assistantMsg;
-
-    // Expose the full chat model payload for debugging (parity with router/summary logs).
-    if (data?.response_payload) {
-      console.log("Chat model response payload:", data.response_payload);
-    }
 
     // Tool-call handling is centralized in main.js to avoid duplicates.
     return data;

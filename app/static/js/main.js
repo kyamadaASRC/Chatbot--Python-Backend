@@ -27,6 +27,18 @@ import { markdownToPDFBlob } from "../modules/utils.js";
 const api_key = null;
 const model = null;
 
+// Map backend progress stage → friendly toast text.
+function mapProgressStage(stage) {
+  const lookup = {
+    "tool:select_docx": "🔍 Selecting a template…",
+    "tool:edit_docx": "✏️ Editing the DOCX…",
+    "tool:generate_xlsx": "📊 Generating spreadsheet…",
+    "tool:generate_pdf": "📄 Generating PDF…",
+    "tool:file_search": "🗂️ Searching files…",
+  };
+  return lookup[stage] || stage;
+}
+
 
 // --- DOM ---
 const sessionManager = new ChatSessionManager(api_key, model);
@@ -637,13 +649,19 @@ scrollDownBtn?.addEventListener("click", () => {
     );
     dismissProgressToasts(routerPreview?.toasts || []);
     announceRouterCompletion(response, routerPreview);
-    // Surface backend progress log as toasts.
+    // Surface backend progress log as toasts with friendly labels.
     if (Array.isArray(response?.progress_log)) {
       response.progress_log.forEach((p) => {
         const stage = p?.stage || "";
         if (!stage) return;
-        showToast(stage, "info", 1200);
+        showToast(mapProgressStage(stage), "info", 1400);
       });
+    }
+
+    // Debug: show tool outputs and selections in console for each turn.
+    console.log("Tool output payload:", response?.output || []);
+    if (Array.isArray(response?.selection_results) && response.selection_results.length) {
+      console.log("Selection results:", response.selection_results);
     }
 
     if (
