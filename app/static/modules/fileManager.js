@@ -220,13 +220,18 @@ function normalizeFileRecord(record = {}, defaults = {}) {
   if (!previewUrl && containerId && containerFileId) {
     const isDocx = mime.toLowerCase().includes("word") || name.toLowerCase().endsWith(".docx");
     const encodedName = encodeURIComponent(name);
-    previewUrl = isDocx
-      ? `/v1/containers/${containerId}/files/${containerFileId}/preview.pdf?name=${encodedName}`
-      : `/v1/containers/${containerId}/files/${containerFileId}/content?name=${encodedName}`;
+    // For DOCX, default to the content endpoint so the UI/mammoth can render it instead of forcing a PDF preview.
+    previewUrl = `/v1/containers/${containerId}/files/${containerFileId}/content?name=${encodedName}`;
+    if (!downloadUrl) {
+      downloadUrl = previewUrl;
+    }
   }
-  // Normalize any stale preview.html links to the current preview.pdf endpoint for DOCX.
+  // Normalize any stale preview.html links to content endpoint for DOCX.
   if (previewUrl && previewUrl.includes("/preview.html")) {
-    previewUrl = previewUrl.replace("/preview.html", "/preview.pdf");
+    previewUrl = previewUrl.replace("/preview.html", "/content");
+  }
+  if (!downloadUrl && previewUrl) {
+    downloadUrl = previewUrl;
   }
   return {
     id,

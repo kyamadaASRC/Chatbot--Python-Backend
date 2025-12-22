@@ -632,6 +632,7 @@ scrollDownBtn?.addEventListener("click", () => {
   renderUserMessage(text);
   editField.value = "";
   const spinner = renderSpinner();
+  const progressToast = showSpinnerToast("Calling OpenAI…");
 
   let routerPreview = null;
   try {
@@ -655,6 +656,11 @@ scrollDownBtn?.addEventListener("click", () => {
         const stage = p?.stage || "";
         if (!stage) return;
         showToast(mapProgressStage(stage), "info", 1400);
+        if (stage === "tool:select_docx") {
+          updateSpinnerToast(progressToast, "Selecting template…");
+        } else if (stage === "tool:edit_docx") {
+          updateSpinnerToast(progressToast, "Editing template…");
+        }
       });
     }
 
@@ -664,13 +670,14 @@ scrollDownBtn?.addEventListener("click", () => {
       console.log("Selection results:", response.selection_results);
     }
 
+    // Always log generated_files for debugging; add to sidebar when present.
+    console.log("GEN FILES", response?.generated_files || []);
     if (
       window.fileManager?.addGeneratedFiles &&
       Array.isArray(response?.generated_files) &&
       response.generated_files.length
     ) {
       try {
-        console.log("GEN FILES", response.generated_files);
         window.fileManager.addGeneratedFiles(response.generated_files);
       } catch (err) {
         console.warn("Failed to record generated files:", err);
@@ -685,6 +692,7 @@ scrollDownBtn?.addEventListener("click", () => {
     }
 
     removeSpinner(spinner);
+    dismissToast(progressToast);
     const output = extractAssistantText(response) || "";
     const toolMd = extractMarkdownFromToolCall(response) || "";
     const hasFiles = Array.isArray(response?.generated_files) && response.generated_files.length > 0;
@@ -710,9 +718,11 @@ scrollDownBtn?.addEventListener("click", () => {
   } catch (err) {
     removeSpinner(spinner);
     dismissProgressToasts(routerPreview?.toasts || []);
+    try { dismissToast(progressToast); } catch {}
     console.error("OpenAI error:", err);
     const message = err?.message ? `⚠️ ${err.message}` : "⚠️ Request failed.";
     renderSystemMessage(message);
+    showToast("Something went wrong. Please try again in a moment.", "error", 3200);
     isGenerating = false;
     setInputDisabled(false);
   }

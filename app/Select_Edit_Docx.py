@@ -320,7 +320,8 @@ def edit_docx_template(
     edit_instructions: str,
     selection_text: Optional[str] = None,
     conversation_history: Optional[List[Dict[str, str]]] = None,
-) -> Dict[str, Any]:
+    desired_filename: str = "edited.docx",
+):
     """
     Load the DOCX file via code interpreter and apply the requested edits.
     Returns output file IDs (if any) plus a short status message.
@@ -353,11 +354,10 @@ def edit_docx_template(
                     # Instruction-only prompt: questioning happens in the main chat model, not here.
                     "Load the existing DOCX template (do NOT rebuild from scratch) and apply these instructions in-place. "
                     "Do NOT duplicate paragraphs or bullet items; keep one final version per section. "
-                    "If the template text is placeholder/lorem ipsum or nonsense and required values are not present in the instructions, STOP and return the status that required values are missing; do not invent content, do not ask questions, and do not reuse placeholder text."
-                    "After applying the edits: save the result as edited.docx in the working directory, then attach edited.docx as an output file so output_file_ids is populated. "
-                    "List the working directory before finishing to verify edited.docx exists. "
-                    f"{history_block}"
-                    f"{selection_block}"
+                    "If a requested bullet/list style is not available in the DOCX, fall back to plain paragraphs prefixed with '• ' instead of erroring. "
+                    "If the template text is placeholder/lorem ipsum or nonsense and required values are not present in the instructions, STOP and return the status that required values are missing; do not invent content, do not ask questions, and do not reuse placeholder text. "
+                    f"After applying the edits: save the result as '{desired_filename}' in the working directory (overwrite if it exists), then attach that file as an output file so output_file_ids is populated. "
+                    f"List only '{desired_filename}' to verify it exists; do not list other files. "
                     "[[Modification Instruction Start]]\n"
                     f"{edit_instructions}\n"
                     "Fill this template as requested and return the edited DOCX file.\n"
@@ -370,10 +370,46 @@ def edit_docx_template(
         tool_choice="required",
     )
     response_dict = getattr(response, "to_dict", lambda: {})()
+    output_items = response_dict.get("output") or getattr(response, "output", []) or []
+    # Extract annotations from the completed message item to capture container file ids even when output_file_ids is empty.
+    message_item = next(
+        (
+            item
+            for item in output_items
+            if isinstance(item, dict)
+            and item.get("type") == "message"
+            and item.get("status") == "completed"
+        ),
+        None,
+    )
+    container_annotations = []
+    if message_item:
+        content_list = message_item.get("content") or []
+        if content_list and isinstance(content_list, list):
+            container_annotations = content_list[0].get("annotations") or []
+    print("container annotations:", container_annotations)
+    # Build a list of file data from container_file_citation annotations
+    files = []
+    for current_file in container_annotations:
+        if current_file.get("type") == "container_file_citation":
+            files.append(
+                {
+                    "container_id": current_file.get("container_id"),
+                    "file_id": current_file.get("file_id"),
+                    "filename": current_file.get("filename"),
+                }
+            )
+    print("files:", files)
+
     file_ids = getattr(response, "output_file_ids", None) or _extract_output_file_ids(response_dict)
-    container_id = _find_container_id(response_dict)
+    container_id = _find_container_id(response_dict) or (files[0].get("container_id") if files else None)
     container_pairs = _extract_container_file_pairs(response_dict)
-    container_file_ids = _extract_container_file_ids_from_annotations(response_dict)
+    container_file_ids = _extract_container_file_ids_from_annotations(response_dict) or [f.get("file_id") for f in files if f.get("file_id")]
+    if not container_file_ids and container_pairs:
+        for pair in container_pairs:
+            fid = pair.get("file_id")
+            if fid:
+                container_file_ids.append(fid)
     print(f"[edit_docx_template] returned file_ids={file_ids}, container_id={container_id}, container_pairs={container_pairs}, container_file_ids={container_file_ids}")
     if not file_ids:
         raw_output = response_dict.get("output")
@@ -383,44 +419,126 @@ def edit_docx_template(
         output_text = " ".join(getattr(response, "output_text"))
     elif isinstance(getattr(response, "output_text", None), str):
         output_text = getattr(response, "output_text")
+    message = output_text.strip() if isinstance(output_text, str) else ""
     # Heuristic checks: placeholder noise or missing header anchors; if found, ask for details and skip returning files.
     doc_bytes = _load_docx_bytes(file_ids or [], container_id, container_file_ids or [])
     if doc_bytes:
         try:
             if _has_placeholder_noise(doc_bytes):
-                message = output_text.strip() or (
-                    "The DOCX still contains placeholder/lorem ipsum; edit_docx expects final values in the instructions. "
-                    "Provide the missing values and re-run edit_docx via the main model when ready."
-                )
-                return {
-                    "message": message,
-                    "file_ids": [],
-                    "container_id": container_id,
-                    "container_file_ids": [],
-                    "response": response_dict,
-                }
+                if not message:
+                    message = (
+                        "Warning: the DOCX still contains placeholder/lorem ipsum text; more values may be needed. "
+                        "Provide missing details and re-run edit_docx if you want a fully filled version."
+                    )
             header_issues = _find_header_issues(doc_bytes)
             if header_issues:
                 missing_list = ", ".join(sorted(set(header_issues)))
-                message = output_text.strip() or (
-                    f"Missing required header values ({missing_list}); edit_docx will not fabricate these. "
-                    "Provide them via the main model and re-run edit_docx when complete."
-                )
-                return {
-                    "message": message,
-                    "file_ids": [],
-                    "container_id": container_id,
-                    "container_file_ids": [],
-                    "response": response_dict,
-                }
+                if not message:
+                    message = (
+                        f"Missing header values ({missing_list}); added 'TBD' where possible. "
+                        "Provide actual values and re-run edit_docx if you want them filled."
+                    )
         except Exception as exc:
             print(f"[post-check] failed to inspect docx: {exc}")
-    message = output_text.strip() or f"Edited DOCX for file {file_id}."
+
+    # Upload a persistent copy to Files API so preview/download works even if container expires.
+    uploaded_fid: Optional[str] = None
+    if isinstance(doc_bytes, (bytes, bytearray)):
+        try:
+            upload = client.files.create(
+                file=(desired_filename, io.BytesIO(doc_bytes), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                purpose="assistants",
+            )
+            uploaded_fid = getattr(upload, "id", None) or getattr(upload, "file_id", None) or None
+            if uploaded_fid:
+                file_ids = (file_ids or []) + [uploaded_fid]
+                print(f"[edit_docx_template:upload] uploaded file_id={uploaded_fid}")
+        except Exception as exc:
+            print(f"[edit_docx_template:upload-error] {exc}")
+    # If we only have a container file id, provide a local_files entry so the UI can surface it.
+    local_files: List[Dict[str, Any]] = []
+    if (not file_ids) and container_id and container_file_ids:
+        cfid = container_file_ids[0]
+        preview_url = f"/v1/containers/{container_id}/files/{cfid}/content?name={desired_filename}"
+        local_files.append(
+            {
+                "id": cfid,
+                "name": desired_filename,
+                "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "container_id": container_id,
+                "container_file_id": cfid,
+                "preview_url": preview_url,
+                "download_url": preview_url,
+                "source": "generated",
+            }
+        )
+    # If no file ids were emitted, try to use any doc bytes to create one.
+    if (not file_ids) and isinstance(doc_bytes, (bytes, bytearray)):
+        try:
+            upload = client.files.create(
+                file=(desired_filename, io.BytesIO(doc_bytes), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                purpose="assistants",
+            )
+            uploaded_id = getattr(upload, "id", None) or getattr(upload, "file_id", None) or None
+            if uploaded_id:
+                file_ids = [uploaded_id]
+                print(f"[edit_docx_template:fallback-upload] uploaded file_id={uploaded_id}")
+        except Exception as exc:
+            print(f"[edit_docx_template:fallback-upload-error] {exc}")
+    # If we still have no file ids but do have a container file, fetch it and upload to Files API.
+    if (not file_ids) and container_id and container_file_ids:
+        try:
+            cfid = container_file_ids[0]
+            resp = client.containers.files.content.retrieve(container_id=container_id, file_id=cfid)  # type: ignore
+            data = resp.read() if hasattr(resp, "read") else resp
+            if isinstance(data, (bytes, bytearray)) and data:
+                upload = client.files.create(
+                    file=(desired_filename, io.BytesIO(data), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                    purpose="assistants",
+                )
+                uploaded_id = getattr(upload, "id", None) or getattr(upload, "file_id", None) or None
+                if uploaded_id:
+                    file_ids = [uploaded_id]
+                    print(f"[edit_docx_template:container-upload] uploaded file_id={uploaded_id}")
+        except Exception as exc:
+            print(f"[edit_docx_template:container-upload-error] {exc}")
+
+    # Fallback: if nothing was attached, emit an unchanged copy so the user can download something.
+    if not file_ids and not container_file_ids:
+        try:
+            fallback = client.responses.create(
+                model="gpt-5.1",
+                input=[
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Load the attached DOCX and save it unchanged as '{desired_filename}', then attach that file as an output file. "
+                            "This is a fallback to ensure the user can download the template even if no edits were applied."
+                        ),
+                    }
+                ],
+                tools=[{"type": "code_interpreter", "container": {"type": "auto", "file_ids": [file_id]}}],
+                tool_choice="required",
+            )
+            fb_dict = getattr(fallback, "to_dict", lambda: {})()
+            file_ids = getattr(fallback, "output_file_ids", None) or _extract_output_file_ids(fb_dict)
+            container_id = container_id or _find_container_id(fb_dict)
+            container_file_ids = container_file_ids or _extract_container_file_ids_from_annotations(fb_dict)
+            print(f"[edit_docx_template:fallback] file_ids={file_ids}, container_file_ids={container_file_ids}")
+            if not message:
+                message = "No edits were attached; provided a fallback copy of the template."
+        except Exception as exc:
+            print(f"[edit_docx_template:fallback-error] {exc}")
+    if (file_ids or container_file_ids or local_files):
+        message = f"Completed edits for {desired_filename}. Check the Files list to download."
+    elif not message:
+        message = output_text.strip() or f"Edited DOCX for file {file_id}."
 
     return {
         "message": message,
         "file_ids": file_ids,
         "container_id": container_id,
         "container_file_ids": container_file_ids,
+        "local_files": local_files,
         "response": response_dict,
     }

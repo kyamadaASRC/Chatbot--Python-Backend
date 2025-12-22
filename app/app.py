@@ -23,14 +23,20 @@ from app.consultants import _extract_id
 
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
-RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "240"))
+RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "300"))
 DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
-GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail.
+GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail. Stay friendly, avoid tool jargon, and never include download links (tell the user to check the Files list instead).
 Tool hand-offs:
 - When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
 - To return documents, call generate_pdf(markdown_text=...) or generate_xlsx(...).
 - For DOCX/template work (e.g., lesson plans, forms): if no template is selected yet, proactively call select_docx based on the user request (you don’t need the user to say “use select_docx”); file_info/selection_text holds keywords/anchor points. YOU must ask the user for the anchor-aligned values (header, overview, objectives, materials, assessment, accommodations, etc.). Do not call edit_docx until you have those values; call edit_docx exactly once with complete edit instructions. Do NOT ask questions from within edit_docx. Do NOT use generate_pdf for DOCX/template requests. If you need to inspect the template or a generated DOCX, you may use code_interpreter with the relevant file_id/container_file_id to read headings/content and verify the fill before responding to the user.
+- Use the conversation’s default file container; do not switch containers unless the user explicitly supplies a persistent vector_store_id. If a vector_store_id is provided, attach it to every edit_docx call and treat that store as the canonical project space.
+- When iterating, pick the latest filled DOCX in the container as the source (prefer “[FILLED]”, then newest timestamp, then highest vN). Do not revert to the original template unless the user says “start fresh” or wants a new base.
+- Ask for missing info in small batches, confirm the source filename and intended changes before editing, and call edit_docx exactly once per version. After editing, report the exact output filename returned and tell the user to check the Files list. Never claim a file was generated unless edit_docx returned one.
+- Name outputs “{base_name} [FILLED] v{n}”, increment n each edit, and keep prior versions. Use edit_docx only for DOCX/template work (not generate_pdf). For meta/explanations, answer in text only and do not call edit_docx unless the user requests a new or corrected edit.
+- If the user is asking a meta/clarifying question about what happened or why something occurred, answer directly in text. Do NOT call select_docx or edit_docx unless the user explicitly asks to run (or re-run) an edit after the explanation.
 - Use web_search_preview or code_interpreter when they materially improve the answer.
+- Ask for information in small batches (3–5 items), acknowledge what you received, and avoid re-asking answered items. If something is missing, list it succinctly. When errors occur, apologize briefly and suggest the next step (retry, provide missing values, etc.).
 Respond using Markdown syntax for code and always wrap code in fenced blocks (```), leaving a blank line before and after each block.
 If you cannot access the data, just say so and do not provide terminal commands.
 Otherwise, reply normally in raw Markdown."""
@@ -369,10 +375,11 @@ def _sanitize_filename(name: Optional[str], suffix: str) -> str:
     return safe
 
 
-def _friendly_filled_name(template_name: Optional[str], file_id: Optional[str]) -> str:
-    """Derive a user-friendly filled filename from the template name."""
-    if template_name:
-        base = template_name[:-5] if template_name.lower().endswith(".docx") else template_name
+def _friendly_filled_name(template_name: Optional[str], file_id: Optional[str], fallback_name: Optional[str] = None) -> str:
+    """Derive a user-friendly filled filename from the template name (preferred) or a known filename."""
+    name_source = template_name or fallback_name
+    if name_source:
+        base = name_source[:-5] if name_source.lower().endswith(".docx") else name_source
         return f"{base} [FILLED].docx"
     if file_id:
         return f"{file_id} [FILLED].docx"
@@ -559,6 +566,14 @@ def _process_server_tool_calls(
         nonlocal container_id, active_vector_store, generated
         if not result:
             return
+        _debug(
+            f"[append_edit_outputs] filled_name='{filled_name}' "
+            f"file_ids={result.get('file_ids')} "
+            f"container_file_ids={result.get('container_file_ids')} "
+            f"local_files_count={len(result.get('local_files') or [])} "
+            f"vector_store_id={result.get('vector_store_id')} "
+            f"container_id={result.get('container_id')}"
+        )
         if include_message and result.get("message"):
             messages.append(result["message"])
         if not container_id and result.get("container_id"):
@@ -568,7 +583,36 @@ def _process_server_tool_calls(
             active_vector_store = result_vs
         output_file_ids = result.get("file_ids") or []
         container_file_ids = result.get("container_file_ids") or []
+        # Prefer container file ids when present so downloads use the container endpoint rather than the Files API.
+        if container_file_ids:
+            cid_result = result.get("container_id") or container_id
+            for cfid in container_file_ids:
+                rec = {
+                    "id": cfid,
+                    "openai_file_id": None,
+                    "container_id": cid_result,
+                    "container_file_id": cfid,
+                    "name": filled_name,
+                    "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "source": "generated",
+                    "vector_store_id": result_vs or target_vs,
+                }
+                if cid_result and cfid:
+                    # Use content endpoint so DOCX renders via mammoth; preview.pdf may 404 if container PDF conversion fails.
+                    rec["preview_url"] = f"/v1/containers/{cid_result}/files/{cfid}/content?name={filled_name}"
+                    rec["download_url"] = rec["preview_url"]
+                generated.append(rec)
         if output_file_ids:
+            # If we already have container files, just link OpenAI file ids to the vector store without adding a second sidebar entry.
+            if container_file_ids:
+                effective_vs = result_vs or target_vs
+                if effective_vs:
+                    try:
+                        _link_files_to_vector_store(output_file_ids, effective_vs)
+                    except Exception as exc:
+                        print(f"[append_edit_outputs] failed to link file ids to VS: {exc}")
+                # Skip adding OpenAI file entries to avoid duplicate sidebar items.
+                output_file_ids = []
             effective_vs = result_vs or target_vs
             if effective_vs:
                 linked = _link_files_to_vector_store(output_file_ids, effective_vs)
@@ -578,12 +622,11 @@ def _process_server_tool_calls(
                         rec["name"] = filled_name
                     if rec.get("mime") is None:
                         rec["mime"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    cid = container_file_map.get(rec["openai_file_id"])
-                    if not cid:
-                        cid = container_id
+                    cid = container_file_map.get(rec.get("openai_file_id"))
+                    # Only attach container metadata when we actually know a container file id mapping.
                     if cid:
                         rec["container_id"] = container_id or cid
-                        rec["container_file_id"] = rec["openai_file_id"]
+                        rec["container_file_id"] = rec.get("openai_file_id")
                 generated.extend(linked)
             else:
                 for fid in output_file_ids:
@@ -593,11 +636,9 @@ def _process_server_tool_calls(
                     if rec.get("mime") is None:
                         rec["mime"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     cid = container_file_map.get(fid)
-                    if not cid:
-                        cid = container_id
                     if cid:
                         rec["container_id"] = container_id or cid
-                        rec["container_file_id"] = fid
+                        rec["container_file_id"] = container_file_map.get(fid)
                     generated.append(rec)
         # Only include container-only entries if we did NOT get OpenAI file ids; avoids duplicate sidebar entries.
         elif container_file_ids:
@@ -631,6 +672,10 @@ def _process_server_tool_calls(
         local_files = result.get("local_files") or []
         for lf in local_files:
             generated.append(lf)
+        _debug(
+            f"[append_edit_outputs] generated_entries_now={len(generated)} "
+            f"container_file_map_keys={list(container_file_map.keys())}"
+        )
 
     # Helpers for per-tool handling to keep the main loop readable.
     def _handle_select(args: Dict[str, Any]) -> Optional[SelectionResult]:
@@ -681,12 +726,39 @@ def _process_server_tool_calls(
                     if cand:
                         template_name = cand
                         break
-        filled_name = _friendly_filled_name(template_name, file_id)
+        meta_name = None
+        if not template_name:
+            try:
+                meta = client.files.retrieve(file_id)
+                meta_dict = _ensure_dict(meta)
+                meta_name = meta_dict.get("filename") or meta_dict.get("display_name")
+            except Exception:
+                meta_name = None
+        filled_name = _friendly_filled_name(template_name, file_id, meta_name)
+        # Lean mode for very large edit instructions: drop optional conversation history to reduce payload size.
+        convo_for_tool = history_messages
+        if len(edit_instructions or "") > 12000:
+            convo_for_tool = None
+        _debug(
+            f"[edit_docx:prepared] file_id={file_id} template_name={template_name} "
+            f"filled_name={filled_name} instructions_len={len(edit_instructions or '')}"
+        )
+        if DEBUG_LOG and edit_instructions:
+            preview_len = 800
+            _debug(f"[edit_docx:instructions_preview]\n{edit_instructions[:preview_len]}")
         result = edit_docx_template(
             file_id=file_id,
             edit_instructions=edit_instructions,
             selection_text=selection_text_local,
-            conversation_history=history_messages,
+            conversation_history=convo_for_tool,
+            desired_filename=filled_name,
+        )
+        _debug(
+            "[edit_docx] result keys="
+            f"{list(result.keys()) if isinstance(result, dict) else result}; "
+            f"file_ids={result.get('file_ids') if isinstance(result, dict) else None}; "
+            f"container_file_ids={result.get('container_file_ids') if isinstance(result, dict) else None}; "
+            f"local_files={len(result.get('local_files') or []) if isinstance(result, dict) else 0}"
         )
         edit_executed = True
         _append_edit_outputs(result, filled_name, target_vs)
@@ -714,6 +786,10 @@ def _process_server_tool_calls(
         if fid and fid in container_file_map:
             rec["container_id"] = container_id or container_file_map[fid]
             rec["container_file_id"] = fid
+    _debug(
+        f"[process_server_tool_calls] total_generated={len(generated)} "
+        f"messages={len(messages)} selection_results={len(selection_results)}"
+    )
     return {
         "generated_files": generated,
         "messages": messages,
@@ -722,12 +798,16 @@ def _process_server_tool_calls(
     }
 
 
-def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], limit: int = 8) -> List[Dict[str, str]]:
-    """Trim conversation history to recent user/assistant turns for assistant calls."""
+def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], recent_limit: int = 6, summary_limit: int = 4000) -> List[Dict[str, str]]:
+    """
+    Provide a rolling context: a compact system summary of older turns plus the most recent turns verbatim.
+    Keeps precision of recent messages while avoiding unbounded payload growth.
+    """
     if not isinstance(history, list) or not history:
         return []
-    cleaned: List[Dict[str, str]] = []
-    for entry in history[-limit:]:
+    recent: List[Dict[str, str]] = []
+    older: List[Dict[str, str]] = []
+    for entry in history:
         if not isinstance(entry, dict):
             continue
         role = entry.get("role")
@@ -739,8 +819,36 @@ def _normalize_history_for_model(history: Optional[List[Dict[str, Any]]], limit:
         text = content.strip()
         if not text:
             continue
-        cleaned.append({"role": role, "content": text[:2000]})
-    return cleaned
+        older.append({"role": role, "content": text})
+    # Split older/recent
+    if len(older) > recent_limit:
+        recent = older[-recent_limit:]
+        older = older[:-recent_limit]
+    else:
+        recent = older
+        older = []
+    summary_lines: List[str] = []
+    total_len = 0
+    for item in older:
+        snippet = item["content"][:800]
+        line = f"{item['role']}: {snippet}"
+        if total_len + len(line) > summary_limit:
+            break
+        summary_lines.append(line)
+        total_len += len(line)
+    summary_entry: List[Dict[str, str]] = []
+    if summary_lines:
+        summary_entry.append(
+            {
+                "role": "system",
+                "content": "Earlier context:\n" + "\n".join(summary_lines),
+            }
+        )
+    # Clamp recent message length but keep full turn structure.
+    cleaned_recent: List[Dict[str, str]] = []
+    for item in recent:
+        cleaned_recent.append({"role": item["role"], "content": item["content"][:2000]})
+    return summary_entry + cleaned_recent
 
 
 def _sanitize_assistant_text(text: Optional[str]) -> Optional[str]:
@@ -761,10 +869,20 @@ def _sanitize_assistant_text(text: Optional[str]) -> Optional[str]:
                 skip_block = False
             continue
         if "download the edited lesson plan" in lower:
-            out_lines.append("Edited lesson plan generated (see files below).")
+            # Drop this boilerplate; Files list already shows artifacts.
+            continue
+        if "sandbox:/mnt/data" in line:
+            # Drop direct sandbox file links; files list handles downloads.
             continue
         out_lines.append(line)
     return "\n".join(out_lines).strip()
+
+
+def _strip_markdown_links(text: Optional[str]) -> Optional[str]:
+    """Remove markdown links to avoid dead-end downloads; keep link text only."""
+    if not isinstance(text, str):
+        return text
+    return re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
 
 
 def _strip_pdf_claims(text: Optional[str], files: List[Dict[str, Any]]) -> Optional[str]:
@@ -816,28 +934,45 @@ def _log_progress(log: Optional[List[Dict[str, Any]]], stage: str, **extra: Any)
 
 def _extract_text(resp) -> str:
     """Mirror `_extract_text` from consultant router so tool + summary paths stay consistent."""
-    text = getattr(resp, "output_text", None)
+    def _coerce_text(val: Any) -> str:
+        if isinstance(val, str):
+            return val
+        if isinstance(val, dict):
+            inner = val.get("value") or val.get("text")
+            if isinstance(inner, str):
+                return inner
+        if isinstance(val, list):
+            parts = [_coerce_text(v) for v in val]
+            return "\n".join([p for p in parts if p])
+        return ""
+
+    raw_text = getattr(resp, "output_text", None)
+    coerced_first = _coerce_text(raw_text)
+    if coerced_first.strip():
+        return coerced_first.strip()
+    text = raw_text
     if isinstance(text, list):
         text = text[0] if text else ""
-    if isinstance(text, str) and text.strip():
-        return text.strip()
     for output in getattr(resp, "output", []) or []:
         if isinstance(output, dict):
             contents = output.get("content")
             if isinstance(contents, list):
                 for c in contents:
                     val = c.get("text") if isinstance(c, dict) else None
-                    if isinstance(val, str) and val.strip():
-                        return val.strip()
+                    coerced = _coerce_text(val)
+                    if coerced.strip():
+                        return coerced.strip()
             txt = output.get("text")
-            if isinstance(txt, str) and txt.strip():
-                return txt.strip()
+            coerced_txt = _coerce_text(txt)
+            if coerced_txt.strip():
+                return coerced_txt.strip()
     choices = getattr(resp, "choices", None)
     if choices:
         msg = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
         val = msg.get("content")
-        if isinstance(val, str) and val.strip():
-            return val.strip()
+        coerced = _coerce_text(val)
+        if coerced.strip():
+            return coerced.strip()
     return ""
 
 
@@ -888,8 +1023,10 @@ def chat():
                     "role": "system",
                     "content": (
                         f"A DOCX template is already selected: file_id={selected_file_id}. "
-                        "Do NOT call select_docx again. You must ask the user concise follow-up questions, grounded in the template anchors, "
-                        "until you have the values needed. Then call edit_docx exactly once with the full instructions. "
+                        "Normally, do NOT call select_docx again; continue with this template. "
+                        "However, if the user asks for a different template or the current one is incorrect, you may re-run select_docx to choose a better match. "
+                        "Ask concise follow-up questions, grounded in the template anchors, until you have the values needed, then call edit_docx exactly once with the full instructions. "
+                        "If the user is asking why a prior edit behaved a certain way or wants an explanation, respond in text only—do NOT call edit_docx unless they explicitly request a new or corrected edit after you answer. "
                         f"Template anchors/context: {selection_text or 'not provided; rely on file_info from selection and user replies.'}"
                     ),
                 }
@@ -924,7 +1061,7 @@ def chat():
             detail = str(last_exc) if last_exc else None
             return jsonify({"error": msg, "detail": detail}), 502
         serialized = _ensure_dict(resp)
-        text = _sanitize_assistant_text(_extract_text(resp) or "")
+        text = _strip_markdown_links(_sanitize_assistant_text(_extract_text(resp) or ""))
         file_ids = getattr(resp, "output_file_ids", None) or []
         generated_files: List[Dict[str, Any]] = []
         selected_file_id = data.get("selected_file_id") or None
@@ -971,32 +1108,32 @@ def chat():
             seen_keys.add(key)
             deduped.append(rec)
         generated_files = deduped
+        _debug(f"[chat] generated_files before response={generated_files}")
         tool_messages = tool_results.get("messages") or []
         if tool_messages:
             sanitized_msgs: List[str] = []
             for msg_text in tool_messages:
                 if not isinstance(msg_text, str):
                     continue
-                cleaned = _sanitize_assistant_text(msg_text) or ""
+                cleaned = _strip_markdown_links(_sanitize_assistant_text(msg_text) or "")
                 cleaned = _strip_pdf_claims(cleaned, generated_files) or cleaned
                 if cleaned.strip():
                     sanitized_msgs.append(cleaned.strip())
             if sanitized_msgs:
                 text = f"{text}\\n\\n" + "\\n\\n".join(sanitized_msgs) if text else "\\n\\n".join(sanitized_msgs)
-        # If no assistant text and we have a fresh selection, surface a structured prompt to collect details.
+        # If no assistant text and we have a fresh selection, surface a structured prompt to collect details
+        # based on the selected template's anchors (selection_text/file_info).
         if not text and selection_results:
             last_sel = selection_results[-1] if isinstance(selection_results, list) else None
             if isinstance(last_sel, dict):
+                anchors = last_sel.get("selection_text") or last_sel.get("file_info") or ""
+                template_name = last_sel.get("template_name") or last_sel.get("file_id") or "this template"
+                # Trim anchors to keep the prompt concise
+                anchors_snippet = anchors.strip()[:1200] if isinstance(anchors, str) else ""
                 text = (
-                    "I have the lesson plan template. Please provide brief answers for these sections so I can fill it in-place:\n\n"
-                    "1) Header: Class/Subject (period/grade), Teacher, Date.\n"
-                    "2) Overview/Purpose: 2–4 sentences on the lesson focus.\n"
-                    "3) Objectives (3 bullets, measurable).\n"
-                    "4) Materials/Tech: bullets.\n"
-                    "5) Procedures/Activity: short outline or key steps.\n"
-                    "6) Assessment/Exit Ticket: how you’ll check understanding.\n"
-                    "7) Accommodations/Notes: any differentiation/UDL or teacher notes.\n\n"
-                    "Reply with these and I’ll run edit_docx once to apply them."
+                    f"I have the template '{template_name}'. Please provide the values for its fillable fields/anchors so I can fill it in-place:\n\n"
+                    f"{anchors_snippet}\n\n"
+                    "Reply with the requested values and I’ll run edit_docx once to apply them. If you prefer a different template, tell me and I can re-run select_docx."
                 )
         text = _strip_pdf_claims(text, generated_files)
         return jsonify({
