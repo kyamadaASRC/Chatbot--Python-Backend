@@ -35,6 +35,8 @@ function mapProgressStage(stage) {
     "tool:generate_xlsx": "📊 Generating spreadsheet…",
     "tool:generate_pdf": "📄 Generating PDF…",
     "tool:file_search": "🗂️ Searching files…",
+    "conversation_api": "☁️ Using Conversations API…",
+    "conversation_legacy_fallback": "↩️ Using local history fallback…",
   };
   return lookup[stage] || stage;
 }
@@ -48,6 +50,8 @@ const chatClient = new ChatClient(api_key, model, sessionManager);
 window.sessionManager = sessionManager;
 window.fileManager = fileManager;
 window.current_container_id = null;
+window.current_conversation_id = null;
+window.last_selected_docx_id = null;
 const sidebar            = document.getElementById("sidebar");
 const logo               = document.getElementById("logo");
 const chatHistory        = document.getElementById("chat-history");
@@ -76,6 +80,8 @@ let useStreaming = false; // toggle for streaming mode
 let current_session_id = null;
 let current_vector_store_id = null;
 let current_container_id = null;
+let current_conversation_id = null;
+let current_selected_file_id = null;
 let existingSessions = [];
 // Shape the recent chat history into the payload the backend router expects.
 function buildRouterHistoryPayload(history = [], limit = 6) {
@@ -322,6 +328,8 @@ async function createAndMountSession(name = "New Chat") {
     history: session?.history || [],
     files: session?.files || [],
     vector_store_id: session.vector_store_id || null,
+    conversation_id: session.conversation_id || null,
+    selected_file_id: session.selected_file_id || null,
     container_id: session.container_id || null,
   });
   chatSessionList.appendChild(sessionDiv);
@@ -335,6 +343,10 @@ async function createAndMountSession(name = "New Chat") {
   window.current_vector_store_id = current_vector_store_id;
   current_container_id = session.container_id || null;
   window.current_container_id = current_container_id;
+  current_selected_file_id = session.selected_file_id || null;
+  window.last_selected_docx_id = current_selected_file_id;
+  current_conversation_id = session.conversation_id || null;
+  window.current_conversation_id = current_conversation_id;
 
   // 4) clear chat view & show system line
   chatHistory.innerHTML = "";
@@ -483,6 +495,10 @@ chatSessionList.addEventListener("click", async (e) => {
       window.current_vector_store_id = current_vector_store_id;
       current_container_id = null;
       window.current_container_id = current_container_id;
+      current_conversation_id = null;
+      window.current_conversation_id = current_conversation_id;
+      current_selected_file_id = null;
+      window.last_selected_docx_id = current_selected_file_id;
       chatHistory.innerHTML = "";
       uploadedFilesList && (uploadedFilesList.innerHTML = "");
       const newDiv = await createAndMountSession("New Chat");
@@ -512,6 +528,10 @@ chatSessionList.addEventListener("click", async (e) => {
     window.current_vector_store_id = current_vector_store_id;
     current_container_id = sessionDiv.getAttribute("container_id") || data?.container_id || null;
     window.current_container_id = current_container_id;
+    current_conversation_id = sessionDiv.getAttribute("conversation_id") || data?.conversation_id || null;
+    window.current_conversation_id = current_conversation_id;
+    current_selected_file_id = sessionDiv.getAttribute("selected_file_id") || data?.selected_file_id || null;
+    window.last_selected_docx_id = current_selected_file_id;
     // Render history + files
     chatHistory.innerHTML = "";
     if (data) {
@@ -662,6 +682,17 @@ scrollDownBtn?.addEventListener("click", () => {
           updateSpinnerToast(progressToast, "Editing template…");
         }
       });
+    }
+    if (response?.conversation_mode) {
+      const mode = response.conversation_mode;
+      if (mode === "conversations_api") {
+        showToast("☁️ Conversations API in use", "success", 1400);
+      } else {
+        showToast("↩️ Using legacy history fallback", "warning", 1800);
+      }
+      if (response.conversation_error) {
+        console.warn("Conversation mode fallback detail:", response.conversation_error);
+      }
     }
 
     // Debug: show tool outputs and selections in console for each turn.

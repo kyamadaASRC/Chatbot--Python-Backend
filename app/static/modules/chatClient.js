@@ -14,6 +14,8 @@ export class ChatClient {
   async sendMessage(prompt, useStreaming = false, signal = null, systemPrompt = "", routerDecision = null) {
     const session = this.sessionManager.getCurrentSession() || {};
     const history = this.sessionManager.getHistory() || [];
+    const conversationId = session?.conversation_id || window.current_conversation_id || null;
+    const selectedFileId = session?.selected_file_id || window.last_selected_docx_id || null;
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       throw new Error("User prompt is missing or invalid.");
@@ -201,6 +203,8 @@ export class ChatClient {
         message: prompt,
         vector_store_id: vectorStoreId || null,
         container_id: containerId || null,
+        conversation_id: conversationId || null,
+        selected_file_id: selectedFileId || null,
         tools,
         history: historyMsgs,
         files: Array.isArray(session.files) ? session.files : [],
@@ -224,6 +228,32 @@ export class ChatClient {
     // Debug log once; avoid duplicate console spam.
     console.log("Chat model response:", data);
     showToast("Response received", "success", 1200);
+
+    if (data?.conversation_id) {
+      window.current_conversation_id = data.conversation_id;
+      try {
+        this.sessionManager.setConversationId?.(data.conversation_id);
+      } catch (err) {
+        console.warn("Failed to persist conversation_id:", err);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(data || {}, "selected_file_id")) {
+      const fid = data.selected_file_id || null;
+      window.last_selected_docx_id = fid;
+      try {
+        this.sessionManager.setSelectedFileId?.(fid);
+      } catch (err) {
+        console.warn("Failed to persist selected_file_id:", err);
+      }
+    } else if (Array.isArray(data?.selection_results) && data.selection_results.length) {
+      const fid = data.selection_results[0]?.file_id || null;
+      window.last_selected_docx_id = fid;
+      try {
+        this.sessionManager.setSelectedFileId?.(fid);
+      } catch (err) {
+        console.warn("Failed to persist selected_file_id from selection_results:", err);
+      }
+    }
 
     // Extract assistant text robustly from the response
     const extractAssistantTextFromResponse = (resp) => {

@@ -185,6 +185,8 @@ export function renderSessionItem(session) {
     session_div.setAttribute("title", session.name);
     session_div.setAttribute("vector_store_id", session.vector_store_id);
     if (session.container_id) session_div.setAttribute("container_id", session.container_id);
+    if (session.selected_file_id) session_div.setAttribute("selected_file_id", session.selected_file_id);
+    if (session.conversation_id) session_div.setAttribute("conversation_id", session.conversation_id);
     session_div.setAttribute("file_ids", JSON.stringify(session.files || []));
     session_div.setAttribute("history", JSON.stringify(session.history || []));
     session_div.innerHTML = `

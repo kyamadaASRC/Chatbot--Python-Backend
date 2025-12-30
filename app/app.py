@@ -25,6 +25,7 @@ from app.consultants import _extract_id
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "300"))
 DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
+CONVERSATIONS_ENABLED = os.getenv("CONVERSATIONS_ENABLED", "1") == "1"
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail. Stay friendly, avoid tool jargon, and never include download links (tell the user to check the Files list instead).
 Tool hand-offs:
 - When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
@@ -987,6 +988,9 @@ def chat():
     history_payload = data.get("history")
     selected_file_id = data.get("selected_file_id") or None
     selection_text = data.get("selection_text") or None
+    conversation_id = data.get("conversation_id") or None
+    conversation_mode = "conversations_api" if CONVERSATIONS_ENABLED else "legacy_history"
+    conversation_error: Optional[str] = None
     history_messages = _normalize_history_for_model(history_payload)
     if not msg:
         return jsonify({"error": "Missing message"}), 400
@@ -1016,46 +1020,84 @@ def chat():
             if not already:
                 tools.append(copy.deepcopy(spec))
 
-        convo_input: List[Dict[str, str]] = [{"role": "system", "content": GENERAL_CHAT_SYSTEM}]
-        if selected_file_id:
-            convo_input.append(
-                {
-                    "role": "system",
-                    "content": (
-                        f"A DOCX template is already selected: file_id={selected_file_id}. "
-                        "Normally, do NOT call select_docx again; continue with this template. "
-                        "However, if the user asks for a different template or the current one is incorrect, you may re-run select_docx to choose a better match. "
-                        "Ask concise follow-up questions, grounded in the template anchors, until you have the values needed, then call edit_docx exactly once with the full instructions. "
-                        "If the user is asking why a prior edit behaved a certain way or wants an explanation, respond in text only—do NOT call edit_docx unless they explicitly request a new or corrected edit after you answer. "
-                        f"Template anchors/context: {selection_text or 'not provided; rely on file_info from selection and user replies.'}"
-                    ),
-                }
-            )
-        convo_input.extend(history_messages)
-        convo_input.append({"role": "user", "content": msg})
+        def _build_convo_input(include_history: bool) -> List[Dict[str, str]]:
+            convo_input: List[Dict[str, str]] = [{"role": "system", "content": GENERAL_CHAT_SYSTEM}]
+            if selected_file_id:
+                convo_input.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            f"A DOCX template is already selected: file_id={selected_file_id}. "
+                            "Normally, do NOT call select_docx again; continue with this template. "
+                            "However, if the user asks for a different template or the current one is incorrect, you may re-run select_docx to choose a better match. "
+                            "Ask concise follow-up questions, grounded in the template anchors, until you have the values needed, then call edit_docx exactly once with the full instructions. "
+                            "If the user is asking why a prior edit behaved a certain way or wants an explanation, respond in text only—do NOT call edit_docx unless they explicitly request a new or corrected edit after you answer. "
+                            f"Template anchors/context: {selection_text or 'not provided; rely on file_info from selection and user replies.'}"
+                        ),
+                    }
+                )
+            if include_history:
+                convo_input.extend(history_messages)
+            convo_input.append({"role": "user", "content": msg})
+            return convo_input
+
+        convo_input: List[Dict[str, str]] = _build_convo_input(False)
         resp = None
         last_exc: Optional[Exception] = None
-        for attempt in range(3):
+        progress_log: List[Dict[str, Any]] = []
+
+        if conversation_mode == "conversations_api" and not conversation_id:
+            try:
+                convo = client.conversations.create()  # type: ignore
+                conversation_id = _extract_id(convo)  # type: ignore[arg-type]
+            except Exception as exc:
+                conversation_error = str(exc)
+                conversation_mode = "legacy_history"
+                _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
+
+        if conversation_mode == "conversations_api" and conversation_id:
+            _log_progress(progress_log, "conversation_api", conversation_id=conversation_id)
             try:
                 resp = client.responses.create(
                     model=CHAT_MODEL,
+                    conversation=conversation_id,
                     input=convo_input,  # type: ignore
                     tools=tools or None,  # type: ignore
                     timeout=RESPONSE_TIMEOUT,
                 )
-                break
-            except openai.APITimeoutError as exc:
-                last_exc = exc
-                print(f"[openai-timeout] attempt {attempt+1} timed out")
-            except openai.APIConnectionError as exc:
-                last_exc = exc
-                print(f"[openai-connection-error] attempt {attempt+1}: {exc}")
             except Exception as exc:
+                conversation_error = str(exc)
+                conversation_mode = "legacy_history"
                 last_exc = exc
-                print(f"[openai-error] attempt {attempt+1}: {exc}")
-            if resp is None and attempt < 2:
-                delay = 2 * (attempt + 1) + (0.5 * (attempt + 1))
-                time.sleep(delay)
+                _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
+
+        if resp is None and conversation_mode == "conversations_api":
+            conversation_mode = "legacy_history"
+            _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
+
+        if resp is None:
+            convo_input = _build_convo_input(True)
+            for attempt in range(3):
+                try:
+                    resp = client.responses.create(
+                        model=CHAT_MODEL,
+                        input=convo_input,  # type: ignore
+                        tools=tools or None,  # type: ignore
+                        timeout=RESPONSE_TIMEOUT,
+                    )
+                    break
+                except openai.APITimeoutError as exc:
+                    last_exc = exc
+                    print(f"[openai-timeout] attempt {attempt+1} timed out")
+                except openai.APIConnectionError as exc:
+                    last_exc = exc
+                    print(f"[openai-connection-error] attempt {attempt+1}: {exc}")
+                except Exception as exc:
+                    last_exc = exc
+                    print(f"[openai-error] attempt {attempt+1}: {exc}")
+                if resp is None and attempt < 2:
+                    delay = 2 * (attempt + 1) + (0.5 * (attempt + 1))
+                    time.sleep(delay)
         if resp is None:
             msg = "Connection to OpenAI failed. Please try again in a moment."
             detail = str(last_exc) if last_exc else None
@@ -1066,7 +1108,6 @@ def chat():
         generated_files: List[Dict[str, Any]] = []
         selected_file_id = data.get("selected_file_id") or None
         selection_text = data.get("selection_text") or None
-        progress_log: List[Dict[str, Any]] = []
         tool_results = _process_server_tool_calls(
             serialized,
             vector_store_id,
@@ -1140,6 +1181,9 @@ def chat():
             "text": text,
             "mode": "direct",
             "file_ids": file_ids,
+            "conversation_id": conversation_id,
+            "conversation_mode": conversation_mode,
+            "conversation_error": conversation_error,
             "generated_files": generated_files,
             "selection_results": selection_results,
             "selected_file_id": selected_file_id,
@@ -1162,6 +1206,18 @@ def create_vector_store():
     try:
         vs = client.vector_stores.create(name=name)
         return jsonify(_serialize(vs))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/v1/conversations", methods=["POST"])
+def create_conversation_api():
+    """Provision a new Conversations API thread so the frontend can persist chat state server-side."""
+    payload = request.get_json(force=True) or {}
+    name = payload.get("name") or f"Session Conversation - {uuid.uuid4()}"
+    try:
+        convo = client.conversations.create()  # type: ignore
+        return jsonify(_serialize(convo))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 

@@ -35,6 +35,8 @@ export class ChatSessionManager {
         name: session.name,
         vector_store_id: session.vector_store_id,
         container_id: session.container_id || null,
+        selected_file_id: session.selected_file_id || null,
+        conversation_id: session.conversation_id || null,
         files: session.files || [],
         messages: session.history || []
     };
@@ -87,6 +89,8 @@ export class ChatSessionManager {
             history: [],
             files: [],
             vector_store_id: vector?.id || null,
+            conversation_id: null,
+            selected_file_id: null,
             container_id: null,
         };
 
@@ -95,6 +99,7 @@ export class ChatSessionManager {
         this.currentSessionId = id;
         window.current_session_id = id;
         window.current_vector_store_id = vector?.id || null;
+        window.current_conversation_id = null;
         window.current_container_id = null;
         localStorage.setItem(`session_${id}`, JSON.stringify(session));
 
@@ -111,6 +116,23 @@ export class ChatSessionManager {
             const session = this.sessions.get(id);
 
             this.hydrateSessionFiles(session);
+            try {
+                const domEl = document.querySelector(`.chat-session-item[sessionID="${session?.id}"]`);
+                const domConversationId = domEl?.getAttribute("conversation_id") || null;
+                const domSelectedFileId = domEl?.getAttribute("selected_file_id") || null;
+                if (session && !session.conversation_id && domConversationId) {
+                    session.conversation_id = domConversationId;
+                }
+                if (session && !session.selected_file_id && domSelectedFileId) {
+                    session.selected_file_id = domSelectedFileId;
+                }
+            } catch {}
+            try {
+                window.current_conversation_id = session?.conversation_id || null;
+            } catch {}
+            try {
+                window.last_selected_docx_id = session?.selected_file_id || null;
+            } catch {}
 
             return session;
         }
@@ -240,6 +262,51 @@ export class ChatSessionManager {
 
     getHistory() {
         return this.getCurrentSession()?.history || [];
+    }
+
+    getConversationId() {
+        return this.getCurrentSession()?.conversation_id || null;
+    }
+
+    setConversationId(conversationId) {
+        const session = this.getCurrentSession();
+        if (!session) return;
+        session.conversation_id = conversationId || null;
+        window.current_conversation_id = session.conversation_id;
+        // mirror onto DOM element for persistence between reloads
+        try {
+            const sessionEl = document.querySelector(`.chat-session-item[sessionID="${session.id}"]`);
+            if (sessionEl) {
+                if (conversationId) {
+                    sessionEl.setAttribute("conversation_id", conversationId);
+                } else {
+                    sessionEl.removeAttribute("conversation_id");
+                }
+            }
+        } catch {}
+        this.saveSessionsToLocal();
+    }
+
+    getSelectedFileId() {
+        return this.getCurrentSession()?.selected_file_id || null;
+    }
+
+    setSelectedFileId(fileId) {
+        const session = this.getCurrentSession();
+        if (!session) return;
+        session.selected_file_id = fileId || null;
+        window.last_selected_docx_id = session.selected_file_id;
+        try {
+            const sessionEl = document.querySelector(`.chat-session-item[sessionID="${session.id}"]`);
+            if (sessionEl) {
+                if (fileId) {
+                    sessionEl.setAttribute("selected_file_id", fileId);
+                } else {
+                    sessionEl.removeAttribute("selected_file_id");
+                }
+            }
+        } catch {}
+        this.saveSessionsToLocal();
     }
 
     getSystemPrompt() {
@@ -435,7 +502,19 @@ export class ChatSessionManager {
 
     loadSessionsFromLocal() {
         const data = JSON.parse(localStorage.getItem("chatSessions") || "[]");
-        this.sessions = new Map(data);
+        const normalized = Array.isArray(data)
+            ? data.map(([id, session]) => {
+                  const s = session || {};
+                  if (!("conversation_id" in s)) {
+                      s.conversation_id = null;
+                  }
+                  if (!("selected_file_id" in s)) {
+                      s.selected_file_id = null;
+                  }
+                  return [id, s];
+              })
+            : [];
+        this.sessions = new Map(normalized);
     }
 
 }
