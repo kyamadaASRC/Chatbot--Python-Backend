@@ -8,8 +8,6 @@ import json
 import re
 import tempfile
 import time
-import subprocess
-import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any, TypedDict, Tuple, Union
 from flask import Flask, request, jsonify, send_file, render_template
@@ -17,7 +15,6 @@ from flask_cors import CORS
 from openpyxl import Workbook
 
 from app.openai_client import client
-import openai
 from app.Select_Edit_Docx import edit_docx_template, select_docx_template
 from app.consultants import _extract_id
 
@@ -25,7 +22,6 @@ from app.consultants import _extract_id
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-5")
 RESPONSE_TIMEOUT = int(os.getenv("RESPONSE_TIMEOUT", "300"))
 DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
-CONVERSATIONS_ENABLED = os.getenv("CONVERSATIONS_ENABLED", "1") == "1"
 GENERAL_CHAT_SYSTEM = """You are a helpful assistant. Keep answers concise unless the user asks for more detail. Stay friendly, avoid tool jargon, and never include download links (tell the user to check the Files list instead).
 Tool hand-offs:
 - When reading user uploads, call file_search first (session stores are linked) or code_interpreter to inspect/transform files.
@@ -296,75 +292,6 @@ def _fetch_file_metadata(file_id: str, source: str = "generated") -> Dict[str, A
     }
 
 
-_PREVIEW_CACHE_DIR = Path("artifacts/previews")
-_PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-_LOCAL_FILES_DIR = Path("artifacts/generated_files")
-_LOCAL_FILES_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _convert_docx_to_pdf_bytes(docx_bytes: bytes) -> Optional[bytes]:
-    """Convert DOCX bytes to PDF bytes using docx2pdf. Returns None on failure."""
-    try:
-        try:
-            import docx2pdf  # type: ignore
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "docx2pdf"])
-            import docx2pdf  # type: ignore
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            src = tmpdir_path / "input.docx"
-            out = tmpdir_path / "output.pdf"
-            src.write_bytes(docx_bytes)
-            try:
-                docx2pdf.convert(str(src), str(out))  # type: ignore
-            except Exception as e:
-                print(f"[preview-convert-error] docx2pdf failed: {e}")
-            if out.exists():
-                return out.read_bytes()
-        # Fallback: use libreoffice if docx2pdf failed
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmpdir_path = Path(tmpdir)
-                src = tmpdir_path / "input.docx"
-                out_dir = tmpdir_path / "out"
-                src.write_bytes(docx_bytes)
-                out_dir.mkdir(exist_ok=True)
-                subprocess.check_call(
-                    ["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(out_dir), str(src)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                out_pdf = out_dir / "input.pdf"
-                if out_pdf.exists():
-                    return out_pdf.read_bytes()
-        except Exception as e:
-            print(f"[preview-convert-error] libreoffice failed: {e}")
-    except Exception as exc:
-        print(f"[preview-convert-error] {exc}")
-    return None
-
-
-def _convert_docx_to_html(docx_bytes: bytes) -> Optional[str]:
-    """Convert DOCX bytes to HTML using mammoth. Returns HTML string or None."""
-    try:
-        try:
-            import mammoth  # type: ignore
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "mammoth"])
-            import mammoth  # type: ignore
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            src = tmpdir_path / "input.docx"
-            src.write_bytes(docx_bytes)
-            with open(src, "rb") as docx_file:
-                result = mammoth.convert_to_html(docx_file)  # type: ignore
-                html = result.value  # type: ignore
-                return html
-    except Exception as exc:
-        print(f"[preview-html-error] {exc}")
-    return None
-
-
 def _sanitize_filename(name: Optional[str], suffix: str) -> str:
     """Ensure we return filesystem-safe filenames with the proper suffix."""
     base = (name or "").strip() or f"assistant_output{suffix}"
@@ -435,23 +362,14 @@ def _persist_container_file(
             return None
         # Cache DOCX locally for download
         safe_name = _sanitize_filename(filename, ".docx")
-        local_docx = _LOCAL_FILES_DIR / safe_name
+        local_dir = Path("artifacts/generated_files")
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_docx = local_dir / safe_name
         try:
             local_docx.write_bytes(data)
         except Exception as exc:
             print(f"[persist-container] failed to cache docx locally: {exc}")
         download_url = f"/local_files/{local_docx.name}" if local_docx.exists() else None
-        # Cache HTML preview via mammoth
-        preview_url = None
-        html = _convert_docx_to_html(data) if isinstance(data, (bytes, bytearray)) else None
-        if html:
-            safe_html = _sanitize_filename(filename, ".html")
-            local_html = _PREVIEW_CACHE_DIR / safe_html
-            try:
-                local_html.write_text(html)
-                preview_url = f"/local_previews/{local_html.name}"
-            except Exception as exc:
-                print(f"[persist-container] failed to cache html preview: {exc}")
         upload = client.files.create(  # type: ignore
             file=(filename, io.BytesIO(data), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             purpose="assistants",
@@ -461,7 +379,6 @@ def _persist_container_file(
         rec["name"] = filename
         rec["container_id"] = container_id
         rec["container_file_id"] = container_file_id
-        rec["preview_url"] = preview_url
         rec["download_url"] = download_url
         if vector_store_id:
             try:
@@ -989,7 +906,7 @@ def chat():
     selected_file_id = data.get("selected_file_id") or None
     selection_text = data.get("selection_text") or None
     conversation_id = data.get("conversation_id") or None
-    conversation_mode = "conversations_api" if CONVERSATIONS_ENABLED else "legacy_history"
+    conversation_mode = "conversations_api"
     conversation_error: Optional[str] = None
     history_messages = _normalize_history_for_model(history_payload)
     if not msg:
@@ -1041,67 +958,25 @@ def chat():
             convo_input.append({"role": "user", "content": msg})
             return convo_input
 
-        convo_input: List[Dict[str, str]] = _build_convo_input(False)
-        resp = None
-        last_exc: Optional[Exception] = None
+        convo_input: List[Dict[str, str]] = _build_convo_input(True)
         progress_log: List[Dict[str, Any]] = []
 
-        if conversation_mode == "conversations_api" and not conversation_id:
-            try:
+        try:
+            if not conversation_id:
+                _log_progress(progress_log, "conversation_create")
                 convo = client.conversations.create()  # type: ignore
                 conversation_id = _extract_id(convo)  # type: ignore[arg-type]
-            except Exception as exc:
-                conversation_error = str(exc)
-                conversation_mode = "legacy_history"
-                _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
-
-        if conversation_mode == "conversations_api" and conversation_id:
             _log_progress(progress_log, "conversation_api", conversation_id=conversation_id)
-            try:
-                resp = client.responses.create(
-                    model=CHAT_MODEL,
-                    conversation=conversation_id,
-                    input=convo_input,  # type: ignore
-                    tools=tools or None,  # type: ignore
-                    timeout=RESPONSE_TIMEOUT,
-                )
-            except Exception as exc:
-                conversation_error = str(exc)
-                conversation_mode = "legacy_history"
-                last_exc = exc
-                _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
-
-        if resp is None and conversation_mode == "conversations_api":
-            conversation_mode = "legacy_history"
-            _log_progress(progress_log, "conversation_legacy_fallback", error=conversation_error)
-
-        if resp is None:
-            convo_input = _build_convo_input(True)
-            for attempt in range(3):
-                try:
-                    resp = client.responses.create(
-                        model=CHAT_MODEL,
-                        input=convo_input,  # type: ignore
-                        tools=tools or None,  # type: ignore
-                        timeout=RESPONSE_TIMEOUT,
-                    )
-                    break
-                except openai.APITimeoutError as exc:
-                    last_exc = exc
-                    print(f"[openai-timeout] attempt {attempt+1} timed out")
-                except openai.APIConnectionError as exc:
-                    last_exc = exc
-                    print(f"[openai-connection-error] attempt {attempt+1}: {exc}")
-                except Exception as exc:
-                    last_exc = exc
-                    print(f"[openai-error] attempt {attempt+1}: {exc}")
-                if resp is None and attempt < 2:
-                    delay = 2 * (attempt + 1) + (0.5 * (attempt + 1))
-                    time.sleep(delay)
-        if resp is None:
-            msg = "Connection to OpenAI failed. Please try again in a moment."
-            detail = str(last_exc) if last_exc else None
-            return jsonify({"error": msg, "detail": detail}), 502
+            resp = client.responses.create(
+                model=CHAT_MODEL,
+                conversation=conversation_id,
+                input=convo_input,  # type: ignore
+                tools=tools or None,  # type: ignore
+                timeout=RESPONSE_TIMEOUT,
+            )
+        except Exception as exc:
+            conversation_error = str(exc)
+            return jsonify({"error": "Connection to OpenAI failed. Please try again.", "detail": conversation_error}), 502
         serialized = _ensure_dict(resp)
         text = _strip_markdown_links(_sanitize_assistant_text(_extract_text(resp) or ""))
         file_ids = getattr(resp, "output_file_ids", None) or []
@@ -1328,29 +1203,9 @@ def get_container_file_content(container_id, file_id):
 @app.route("/v1/containers/<container_id>/files/<file_id>/preview.pdf", methods=["GET"])
 def get_container_file_preview(container_id, file_id):
     try:
-        resp = client.containers.files.content.retrieve(container_id=container_id, file_id=file_id)  # type: ignore
-        docx_bytes = resp.read() if hasattr(resp, "read") else bytes(resp)
-        html = _convert_docx_to_html(docx_bytes) if isinstance(docx_bytes, (bytes, bytearray)) else None
-        if html:
-            return html, 200, {"Content-Type": "text/html"}
-        cached = _PREVIEW_CACHE_DIR / f"{file_id}.pdf"
-        if cached.exists():
-            return send_file(
-                cached.open("rb"),
-                download_name="preview.pdf",
-                mimetype="application/pdf",
-            )
-        pdf_bytes = _convert_docx_to_pdf_bytes(docx_bytes) if isinstance(docx_bytes, (bytes, bytearray)) else None
-        if pdf_bytes:
-            cached.write_bytes(pdf_bytes)
-            return send_file(
-                io.BytesIO(pdf_bytes),  # type: ignore
-                download_name="preview.pdf",
-                mimetype="application/pdf",
-            )
         download_url = f"/v1/containers/{container_id}/files/{file_id}/content?name={request.args.get('name') or 'download.docx'}"
         html = f"""<html><body style="font-family:sans-serif;padding:16px;">
-            <p>Preview conversion failed. You can download the DOCX instead:</p>
+            <p>Preview rendering is disabled. You can download the DOCX instead:</p>
             <p><a href="{download_url}" target="_blank" rel="noopener">Download DOCX</a></p>
             </body></html>"""
         return html, 200, {"Content-Type": "text/html"}
@@ -1368,18 +1223,6 @@ def get_local_file(fname):
         local_path.open("rb"),
         download_name=fname,
         mimetype="application/octet-stream",
-    )
-
-
-@app.route("/local_previews/<path:fname>", methods=["GET"])
-def get_local_preview(fname):
-    local_path = _PREVIEW_CACHE_DIR / fname
-    if not local_path.exists():
-        return jsonify({"error": "file not found"}), 404
-    return send_file(
-        local_path.open("rb"),
-        download_name=fname,
-        mimetype="text/html",
     )
 
 
